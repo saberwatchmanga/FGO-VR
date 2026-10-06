@@ -1,0 +1,118 @@
+diff --git a/shadps4-arm64-main/src/core/known_title.cpp b/shadps4-arm64-main/src/core/known_title.cpp
+index fe8ae79..2edf6d5 100644
+--- a/shadps4-arm64-main/src/core/known_title.cpp
++++ b/shadps4-arm64-main/src/core/known_title.cpp
+@@ -30,6 +30,105 @@ namespace {
+ 
+ using Clock = std::chrono::steady_clock;
+ 
++// FGO VR uses Unity's native renderScale to size its eye render targets. This is
++// independent of the viewport scale and of the OpenXR compositor's output size.
++// Override only its canonical 1.4f managed request so Unity allocates matching color,
++// depth and intermediate targets through its own allocator. The game later requests
++// 1.4 itself; changing the constructor alone is overwritten. Never patch the PKG.
++float FgoRenderScale() {
++    static const float scale = [] {
++        const char* raw = std::getenv("SHADPS4_FGO_RENDER_SCALE");
++        const std::string_view value = raw != nullptr ? raw : "100";
++        if (value == "100" || value == "off") return 1.0f;
++        if (value == "110") return 1.10f;
++        if (value == "125") return 1.25f;
++#ifndef __aarch64__
++        if (value == "150") return 1.50f;
++#endif
++        LOG_WARNING(Core, "FGO resolution: unsupported setting '{}'; patch disabled", value);
++        return 1.0f;
++    }();
++    return scale;
++}
++
++void PatchFgoRenderScale(VAddr base, u64 size) {
++    if (Common::ElfInfo::Instance().GameSerial() != "CUSA09078") return;
++    const float scale = FgoRenderScale();
++    if (scale == 1.0f) {
++        LOG_INFO(Core, "FGO resolution: OFF, original Unity renderScale (no guest changes)");
++        return;
++    }
++    const auto version = Common::ElfInfo::Instance().AppVer();
++    // 01.01 updates assets only; both verified versions share this executable.
++    if (version != "01.00" && version != "01.01") {
++        LOG_WARNING(Core, "FGO resolution: unverified app version '{}'; patch disabled", version);
++        return;
++    }
++    constexpr u64 Constructor = 0xeb7314;
++    constexpr u8 ConstructorCode[] = {
++        0x41,0xc7,0x87,0xc0,0x01,0x00,0x00,0x00,0x00,0x80,0x3f,
++        0x41,0xc7,0x87,0xc4,0x01,0x00,0x00,0x00,0x00,0x80,0x3f};
++    constexpr u64 Getter = 0xebae30;
++    constexpr u8 GetterCode[] = {
++        0x48,0x8b,0x05,0xc9,0xa7,0x5a,0x00,0xc5,0xf8,0x57,0xc0,
++        0x48,0x85,0xc0,0x74,0x08,0xc5,0xfa,0x10,0x80,0xc0,0x01,0x00,0x00,0xc3};
++    constexpr u64 Setter = 0xeab626;
++    constexpr u8 SetterCode[] = {0xc5,0xfa,0x11,0x83,0xc0,0x01,0x00,0x00};
++    constexpr u64 Name = 0x11f0f6e;
++    constexpr char BindingName[] = "UnityEngine.VR.VRSettings::get_renderScale";
++    constexpr u64 Wrapper = 0xebae50;
++    constexpr u8 WrapperCode[] = {
++        0x48,0x8b,0x3d,0xa9,0xa7,0x5a,0x00,0x48,0x85,0xff,0x74,0x05,
++        0xe9,0x3f,0x07,0xff,0xff,0xc3,
++        0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90};
++    // Preflight EVERY signature before writing anything. Other builds stay intact.
++    if (size < Name + sizeof(BindingName) ||
++        std::memcmp(reinterpret_cast<const void*>(base + Constructor), ConstructorCode,
++                    sizeof(ConstructorCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Getter), GetterCode,
++                    sizeof(GetterCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Setter), SetterCode,
++                    sizeof(SetterCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Wrapper), WrapperCode,
++                    sizeof(WrapperCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Name), BindingName,
++                    sizeof(BindingName)) != 0) {
++        LOG_WARNING(Core, "FGO resolution: executable signatures do not match; patch disabled");
++        return;
++    }
++    // The first executable PT_LOAD ends at 0x138fbe0. This unused zero padding is
++    // inside that segment's last mapped executable page, before the next segment at
++    // 0x1390000. Verify it too before either write; no file or guest allocation changes.
++    constexpr u64 Trampoline = 0x138fc00;
++    constexpr std::array<u8, 28> Empty{};
++    if (size < Trampoline + Empty.size() ||
++        std::memcmp(reinterpret_cast<const void*>(base + Trampoline), Empty.data(),
++                    Empty.size()) != 0) {
++        LOG_WARNING(Core, "FGO resolution: executable padding differs; patch disabled");
++        return;
++    }
++    // movd eax,xmm0; cmp eax,1.4f bits; jne original; movss xmm0,[chosen];
++    // jmp native setter. RAX is caller-saved and not an argument to this wrapper.
++    // A read-back value or a lower/different request is passed through, so repeated
++    // getter/setter restoration cannot compound the scale or suppress game reductions.
++    std::array<u8, 28> code{
++        0x66,0x0f,0x7e,0xc0,0x3d,0x33,0x33,0xb3,0x3f,0x75,0x08,
++        0xf3,0x0f,0x10,0x05,0x05,0,0,0,0xe9,0,0,0,0,0,0,0,0};
++    constexpr s32 to_native = static_cast<s32>(s64{0xeab5a0} - static_cast<s64>(Trampoline + 24));
++    constexpr s32 to_trampoline = static_cast<s32>(static_cast<s64>(Trampoline) -
++                                                  static_cast<s64>(Wrapper + 17));
++    const float requested = 1.4f * scale;
++    std::memcpy(code.data() + 20, &to_native, sizeof(to_native));
++    std::memcpy(code.data() + 24, &requested, sizeof(requested));
++    std::memcpy(reinterpret_cast<void*>(base + Trampoline), code.data(), code.size());
++    // Retain Unity's original manager guard, return, and all neighboring instructions.
++    std::memcpy(reinterpret_cast<void*>(base + Wrapper + 13), &to_trampoline,
++                sizeof(to_trampoline));
++    LOG_INFO(Core, "FGO resolution: canonical Unity renderScale 1.4 -> {:.2f} ({:.2f}x), "
++                   "approximately {:.0f}% of original pixels; other requests and viewport unchanged",
++             requested, scale, scale * scale * 100.0f);
++}
++
+ // Astro Bot Rescue Mission, CUSA12392, in the build whose code at SetRecentre reads as below
+ // (the function of its tracking manager that asks for the head's position to be taken anew).
+ constexpr u64 SetRecentre = 0xc48320;
+@@ -758,6 +857,7 @@ void Prepare() {
+ }
+ 
+ void OnGameLoaded(VAddr base, u64 size) {
++    PatchFgoRenderScale(base, size);
+     if (Common::ElfInfo::Instance().GameSerial() != "CUSA12392" || size < ImageEnd ||
+         std::memcmp(reinterpret_cast<const void*>(base + SetRecentre), SetRecentreCode,
+                     sizeof(SetRecentreCode)) != 0) {

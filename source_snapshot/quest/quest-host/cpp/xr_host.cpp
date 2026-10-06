@@ -1,0 +1,1464 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "xr_host.h"
+#include "touch_input.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <iterator>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "gl_frames.h"
+
+#define XR_USE_PLATFORM_ANDROID
+#define XR_USE_GRAPHICS_API_OPENGL_ES
+#define XR_USE_TIMESPEC
+#include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
+
+#include "core_process.h"
+#include "log.h"
+
+namespace Protocol = Core::Vr::Protocol;
+
+namespace {
+
+constexpr int64_t FormatSrgb8Alpha8 = 0x8C43; // GL_SRGB8_ALPHA8
+constexpr int64_t FormatRgba8 = 0x8058;       // GL_RGBA8
+
+bool Check(XrResult result, const char* what) {
+    if (XR_FAILED(result)) {
+        LOGE("%s failed: %d", what, static_cast<int>(result));
+        return false;
+    }
+    return true;
+}
+
+template <typename Function>
+Function GetFunction(XrInstance instance, const char* name) {
+    PFN_xrVoidFunction function = nullptr;
+    xrGetInstanceProcAddr(instance, name, &function);
+    return reinterpret_cast<Function>(function);
+}
+
+const char* SessionStateName(XrSessionState state) {
+    switch (state) {
+    case XR_SESSION_STATE_IDLE:
+        return "idle";
+    case XR_SESSION_STATE_READY:
+        return "ready";
+    case XR_SESSION_STATE_SYNCHRONIZED:
+        return "synchronized";
+    case XR_SESSION_STATE_VISIBLE:
+        return "visible";
+    case XR_SESSION_STATE_FOCUSED:
+        return "focused";
+    case XR_SESSION_STATE_STOPPING:
+        return "stopping";
+    case XR_SESSION_STATE_LOSS_PENDING:
+        return "loss pending";
+    case XR_SESSION_STATE_EXITING:
+        return "exiting";
+    default:
+        return "unknown";
+    }
+}
+
+XrVector3f Rotate(const XrQuaternionf& q, const XrVector3f& v) {
+    const XrVector3f u{q.x, q.y, q.z};
+    const XrVector3f t{
+        u.y * v.z - u.z * v.y + q.w * v.x,
+        u.z * v.x - u.x * v.z + q.w * v.y,
+        u.x * v.y - u.y * v.x + q.w * v.z,
+    };
+    return {
+        v.x + 2.0f * (u.y * t.z - u.z * t.y),
+        v.y + 2.0f * (u.z * t.x - u.x * t.z),
+        v.z + 2.0f * (u.x * t.y - u.y * t.x),
+    };
+}
+
+struct Swapchain {
+    XrSwapchain handle{XR_NULL_HANDLE};
+    uint32_t width{};
+    uint32_t height{};
+    std::vector<XrSwapchainImageOpenGLESKHR> images;
+    std::vector<GLuint> framebuffers;
+};
+
+class Host {
+public:
+    Host(JavaVM* vm_, jobject activity_, CoreProcess& core_, StatusImage& status_,
+         const XrHostOptions& options_, XrHostStatus& host_status_, std::atomic<bool>& quit_,
+         std::atomic<uint32_t>& recenter_requests_)
+        : vm{vm_}, activity{activity_}, core{core_}, status{status_}, options{options_},
+          host_status{host_status_}, quit{quit_}, recenter_requests{recenter_requests_} {}
+
+    void Run() {
+        if (gl.Create() && InitOpenXr() && InitRendering()) {
+            Loop();
+        } else {
+            LOGE("the headset session could not be set up");
+        }
+        Shutdown();
+    }
+
+private:
+    bool InitOpenXr() {
+        const auto initialize_loader =
+            GetFunction<PFN_xrInitializeLoaderKHR>(XR_NULL_HANDLE, "xrInitializeLoaderKHR");
+        if (initialize_loader == nullptr) {
+            LOGE("the OpenXR loader has no xrInitializeLoaderKHR");
+            return false;
+        }
+        XrLoaderInitInfoAndroidKHR loader_info{XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
+        loader_info.applicationVM = vm;
+        loader_info.applicationContext = activity;
+        if (!Check(initialize_loader(
+                       reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&loader_info)),
+                   "xrInitializeLoaderKHR")) {
+            return false;
+        }
+
+        uint32_t count = 0;
+        xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr);
+        std::vector<XrExtensionProperties> available(count, {XR_TYPE_EXTENSION_PROPERTIES});
+        xrEnumerateInstanceExtensionProperties(nullptr, count, &count, available.data());
+        const auto has = [&](const char* name) {
+            return std::any_of(available.begin(), available.end(), [&](const auto& property) {
+                return std::strcmp(property.extensionName, name) == 0;
+            });
+        };
+
+        std::vector<const char*> extensions = {
+            XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
+            XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
+        };
+        const auto enable_if_present = [&](const char* name) {
+            const bool present = has(name);
+            if (present) {
+                extensions.push_back(name);
+            }
+            return present;
+        };
+        has_refresh_rate = enable_if_present(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+        has_performance = enable_if_present(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
+        has_thread_settings = enable_if_present(XR_KHR_ANDROID_THREAD_SETTINGS_EXTENSION_NAME);
+        has_layer_settings = options.sharpen >= 2 &&
+                             enable_if_present(XR_FB_COMPOSITION_LAYER_SETTINGS_EXTENSION_NAME);
+        // Lets the system drop the sharpening while the GPU has nothing to spare for it. With
+        // an emulator on the same GPU that is nearly always: in a level of the game the filter
+        // was off two thirds of the time, which is why it is only left to the system on request.
+        has_auto_filter = has_layer_settings && options.sharpen == 3 &&
+                          enable_if_present(XR_META_AUTOMATIC_LAYER_FILTER_EXTENSION_NAME);
+        has_swapchain_state =
+            options.cubic && enable_if_present(XR_FB_SWAPCHAIN_UPDATE_STATE_EXTENSION_NAME) &&
+            enable_if_present(XR_FB_SWAPCHAIN_UPDATE_STATE_OPENGL_ES_EXTENSION_NAME);
+        has_hand_tracking =
+            options.track_hands && enable_if_present(XR_EXT_HAND_TRACKING_EXTENSION_NAME);
+        has_layer_resolution =
+            options.dynamic_resolution &&
+            enable_if_present(XR_META_RECOMMENDED_LAYER_RESOLUTION_EXTENSION_NAME);
+        has_metrics = enable_if_present(XR_META_PERFORMANCE_METRICS_EXTENSION_NAME);
+        // Only the probe needs a time without a frame to take it from.
+        has_time_conversion =
+            options.probe && enable_if_present(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
+
+        XrInstanceCreateInfoAndroidKHR android_info{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
+        android_info.applicationVM = vm;
+        android_info.applicationActivity = activity;
+        XrInstanceCreateInfo instance_info{XR_TYPE_INSTANCE_CREATE_INFO};
+        instance_info.next = &android_info;
+        std::strcpy(instance_info.applicationInfo.applicationName, "FGO VR Quest 3");
+        instance_info.applicationInfo.applicationVersion = 1;
+        instance_info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
+        instance_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        instance_info.enabledExtensionNames = extensions.data();
+        if (!Check(xrCreateInstance(&instance_info, &instance), "xrCreateInstance")) {
+            return false;
+        }
+
+        XrSystemGetInfo system_info{XR_TYPE_SYSTEM_GET_INFO};
+        system_info.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+        if (!Check(xrGetSystem(instance, &system_info, &system), "xrGetSystem")) {
+            return false;
+        }
+        XrSystemHandTrackingPropertiesEXT hand_properties{
+            XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT};
+        XrSystemProperties system_properties{XR_TYPE_SYSTEM_PROPERTIES};
+        if (has_hand_tracking) {
+            system_properties.next = &hand_properties;
+        }
+        xrGetSystemProperties(instance, system, &system_properties);
+        max_swapchain_width = system_properties.graphicsProperties.maxSwapchainImageWidth;
+        has_hand_tracking = has_hand_tracking && hand_properties.supportsHandTracking == XR_TRUE;
+        LOGI("OpenXR system: %s, max swapchain %ux%u, hand tracking %d, layer filters %d (left "
+             "to the system %d), cubic sampling %d, recommended layer size %d",
+             system_properties.systemName, max_swapchain_width,
+             system_properties.graphicsProperties.maxSwapchainImageHeight, has_hand_tracking,
+             has_layer_settings, has_auto_filter, has_swapchain_state, has_layer_resolution);
+        if (has_layer_resolution) {
+            get_layer_resolution = GetFunction<PFN_xrGetRecommendedLayerResolutionMETA>(
+                instance, "xrGetRecommendedLayerResolutionMETA");
+        }
+
+        // The runtime insists on being asked this before a session is created.
+        const auto get_requirements = GetFunction<PFN_xrGetOpenGLESGraphicsRequirementsKHR>(
+            instance, "xrGetOpenGLESGraphicsRequirementsKHR");
+        XrGraphicsRequirementsOpenGLESKHR requirements{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
+        if (get_requirements == nullptr ||
+            !Check(get_requirements(instance, system, &requirements),
+                   "xrGetOpenGLESGraphicsRequirementsKHR")) {
+            return false;
+        }
+
+        XrGraphicsBindingOpenGLESAndroidKHR binding{XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR};
+        binding.display = gl.display;
+        binding.config = gl.config;
+        binding.context = gl.context;
+        XrSessionCreateInfo session_info{XR_TYPE_SESSION_CREATE_INFO};
+        session_info.next = &binding;
+        session_info.systemId = system;
+        if (!Check(xrCreateSession(instance, &session_info, &session), "xrCreateSession")) {
+            return false;
+        }
+
+        XrReferenceSpaceCreateInfo space_info{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+        space_info.poseInReferenceSpace.orientation.w = 1.0f;
+        // LOCAL is the seated space: its origin is where the head was when the user last
+        // recentred, which is exactly the emulator's "host space".
+        space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+        if (!Check(xrCreateReferenceSpace(session, &space_info, &local_space), "create LOCAL")) {
+            return false;
+        }
+        space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+        if (!Check(xrCreateReferenceSpace(session, &space_info, &view_space), "create VIEW")) {
+            return false;
+        }
+
+        if (options.touch_controllers && !touch.Initialize(instance, session, local_space)) {
+            return false;
+        }
+        if (has_hand_tracking) {
+            CreateHandTrackers();
+        }
+        if (has_metrics) {
+            FindMetrics();
+        }
+        return true;
+    }
+
+    /// The runtime's own counters (GPU load, the compositor's time, frames it had to repeat,
+    /// load per processor core...): whatever it offers goes into the log, since the app cannot
+    /// see any of that itself.
+    void FindMetrics() {
+        const auto enumerate = GetFunction<PFN_xrEnumeratePerformanceMetricsCounterPathsMETA>(
+            instance, "xrEnumeratePerformanceMetricsCounterPathsMETA");
+        const auto set_state = GetFunction<PFN_xrSetPerformanceMetricsStateMETA>(
+            instance, "xrSetPerformanceMetricsStateMETA");
+        query_metric = GetFunction<PFN_xrQueryPerformanceMetricsCounterMETA>(
+            instance, "xrQueryPerformanceMetricsCounterMETA");
+        uint32_t count = 0;
+        if (enumerate == nullptr || set_state == nullptr || query_metric == nullptr ||
+            XR_FAILED(enumerate(instance, 0, &count, nullptr)) || count == 0) {
+            return;
+        }
+        std::vector<XrPath> paths(count);
+        if (XR_FAILED(enumerate(instance, count, &count, paths.data()))) {
+            return;
+        }
+        XrPerformanceMetricsStateMETA state{XR_TYPE_PERFORMANCE_METRICS_STATE_META};
+        state.enabled = XR_TRUE;
+        if (XR_FAILED(set_state(session, &state))) {
+            return;
+        }
+        for (uint32_t i = 0; i < count && i < paths.size(); ++i) {
+            char name[XR_MAX_PATH_LENGTH]{};
+            uint32_t length = 0;
+            if (XR_FAILED(xrPathToString(instance, paths[i], sizeof(name), &length, name))) {
+                continue;
+            }
+            // "/perfmetrics_meta/device/gpu_utilization" -> "device/gpu_utilization"
+            std::string text{name};
+            if (const size_t slash = text.find('/', 1); slash != std::string::npos) {
+                text.erase(0, slash + 1);
+            }
+            metrics.push_back({paths[i], text});
+        }
+        LOGI("the runtime offers %zu performance counters", metrics.size());
+    }
+
+    /// One line with the present value of every counter the runtime has one for.
+    void ReportMetrics() {
+        if (metrics.empty()) {
+            return;
+        }
+        std::string line;
+        for (const Metric& metric : metrics) {
+            XrPerformanceMetricsCounterMETA counter{XR_TYPE_PERFORMANCE_METRICS_COUNTER_META};
+            if (XR_FAILED(query_metric(session, metric.path, &counter))) {
+                continue;
+            }
+            char value[48];
+            if ((counter.counterFlags & XR_PERFORMANCE_METRICS_COUNTER_FLOAT_VALUE_VALID_BIT_META) !=
+                0) {
+                std::snprintf(value, sizeof(value), "%.2f", counter.floatValue);
+            } else if ((counter.counterFlags &
+                        XR_PERFORMANCE_METRICS_COUNTER_UINT_VALUE_VALID_BIT_META) != 0) {
+                std::snprintf(value, sizeof(value), "%u", counter.uintValue);
+            } else {
+                continue;
+            }
+            static constexpr const char* Units[] = {"", "%", " ms", " B", " Hz"};
+            const auto unit = static_cast<size_t>(counter.counterUnit);
+            line += (line.empty() ? "" : ", ") + metric.name + " " + value +
+                    (unit < std::size(Units) ? Units[unit] : "");
+        }
+        if (!line.empty()) {
+            LOGI("runtime: %s", line.c_str());
+        }
+    }
+
+    void CreateHandTrackers() {
+        const auto create =
+            GetFunction<PFN_xrCreateHandTrackerEXT>(instance, "xrCreateHandTrackerEXT");
+        locate_hand_joints =
+            GetFunction<PFN_xrLocateHandJointsEXT>(instance, "xrLocateHandJointsEXT");
+        if (create == nullptr || locate_hand_joints == nullptr) {
+            has_hand_tracking = false;
+            return;
+        }
+        for (int hand = 0; hand < 2; ++hand) {
+            XrHandTrackerCreateInfoEXT info{XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT};
+            info.hand = hand == 0 ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT;
+            info.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+            if (!Check(create(session, &info, &hand_trackers[hand]), "xrCreateHandTrackerEXT")) {
+                has_hand_tracking = false;
+                return;
+            }
+        }
+        LOGI("hand trackers created");
+    }
+
+    bool CreateSwapchain(Swapchain& swapchain, uint32_t width, uint32_t height) {
+        XrSwapchainCreateInfo info{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+        info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+        info.format = swapchain_format;
+        info.sampleCount = 1;
+        info.width = width;
+        info.height = height;
+        info.faceCount = 1;
+        info.arraySize = 1;
+        info.mipCount = 1;
+        if (!Check(xrCreateSwapchain(session, &info, &swapchain.handle), "xrCreateSwapchain")) {
+            return false;
+        }
+        swapchain.width = width;
+        swapchain.height = height;
+
+        uint32_t count = 0;
+        xrEnumerateSwapchainImages(swapchain.handle, 0, &count, nullptr);
+        swapchain.images.assign(count, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR});
+        if (!Check(xrEnumerateSwapchainImages(
+                       swapchain.handle, count, &count,
+                       reinterpret_cast<XrSwapchainImageBaseHeader*>(swapchain.images.data())),
+                   "xrEnumerateSwapchainImages")) {
+            return false;
+        }
+        swapchain.framebuffers.assign(count, 0);
+        glGenFramebuffers(static_cast<GLsizei>(count), swapchain.framebuffers.data());
+        for (uint32_t i = 0; i < count; ++i) {
+            glBindFramebuffer(GL_FRAMEBUFFER, swapchain.framebuffers[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                   swapchain.images[i].image, 0);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return true;
+    }
+
+    bool InitRendering() {
+        uint32_t count = 0;
+        xrEnumerateSwapchainFormats(session, 0, &count, nullptr);
+        std::vector<int64_t> formats(count);
+        xrEnumerateSwapchainFormats(session, count, &count, formats.data());
+        const bool srgb = std::find(formats.begin(), formats.end(), FormatSrgb8Alpha8) !=
+                          formats.end();
+        swapchain_format = srgb ? FormatSrgb8Alpha8 : FormatRgba8;
+        decode_srgb = srgb;
+
+        // Both eyes side by side in one image, like the frames arrive.
+        const uint32_t frame_width = options.eye_width * 2;
+        const uint32_t frame_height = options.eye_height;
+        const uint32_t swapchain_width =
+            max_swapchain_width != 0 ? std::min(frame_width, max_swapchain_width) : frame_width;
+        if (!CreateSwapchain(game_swapchain, swapchain_width, frame_height) ||
+            !CreateSwapchain(status_swapchain, StatusImage::Width, StatusImage::Height)) {
+            return false;
+        }
+        LOGI("swapchains: %s, the game's %ux%u in %zu images, the panel's %ux%u in %zu; %u "
+             "formats on offer",
+             srgb ? "sRGB" : "plain RGBA", game_swapchain.width, game_swapchain.height,
+             game_swapchain.images.size(), status_swapchain.width, status_swapchain.height,
+             status_swapchain.images.size(), count);
+        for (const Swapchain* swapchain : {&game_swapchain, &status_swapchain}) {
+            for (const GLuint framebuffer : swapchain->framebuffers) {
+                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+                const GLenum state = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+                if (state != GL_FRAMEBUFFER_COMPLETE) {
+                    LOGE("a swapchain image cannot be drawn to (0x%x)", state);
+                }
+            }
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        layer_width = shown_width = game_swapchain.width;
+        layer_height = shown_height = game_swapchain.height;
+        if (has_swapchain_state) {
+            UseCubicSampling(game_swapchain);
+        }
+
+        if (!blitter.Create()) {
+            return false;
+        }
+        LOGI("frames are copied to the compositor's image %s",
+             !srgb || blitter.WritesUnencoded() ? "as they are" : "through a decoder");
+        return frames.Create(gl.display, frame_width, frame_height, core);
+    }
+
+    void PollEvents() {
+        XrEventDataBuffer event{XR_TYPE_EVENT_DATA_BUFFER};
+        while (xrPollEvent(instance, &event) == XR_SUCCESS) {
+            if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+                const auto& changed =
+                    *reinterpret_cast<const XrEventDataSessionStateChanged*>(&event);
+                LOGI("session state: %s", SessionStateName(changed.state));
+                switch (changed.state) {
+                case XR_SESSION_STATE_READY: {
+                    XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
+                    begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                    if (Check(xrBeginSession(session, &begin), "xrBeginSession")) {
+                        session_running = true;
+                        host_status.session_running = true;
+                        ApplySessionSettings();
+                        // The game waited while nobody wore the headset.
+                        core.SetPaused(false);
+                    }
+                    break;
+                }
+                case XR_SESSION_STATE_STOPPING:
+                    xrEndSession(session);
+                    session_running = false;
+                    host_status.session_running = false;
+                    // The headset came off: a game nobody sees should not play on.
+                    core.SetPaused(true);
+                    break;
+                case XR_SESSION_STATE_EXITING:
+                case XR_SESSION_STATE_LOSS_PENDING:
+                    exit_requested = true;
+                    break;
+                default:
+                    break;
+                }
+            } else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
+                exit_requested = true;
+            } else if (event.type == XR_TYPE_EVENT_DATA_PERF_SETTINGS_EXT) {
+                // The system saying that the headset runs hot or cannot keep up: levels are
+                // 0 normal, 25 warning, 75 impaired.
+                const auto& changed = *reinterpret_cast<const XrEventDataPerfSettingsEXT*>(&event);
+                LOGW("performance notice: %s %s went from level %d to %d",
+                     changed.domain == XR_PERF_SETTINGS_DOMAIN_CPU_EXT ? "processor" : "GPU",
+                     changed.subDomain == XR_PERF_SETTINGS_SUB_DOMAIN_THERMAL_EXT
+                         ? "temperature"
+                         : changed.subDomain == XR_PERF_SETTINGS_SUB_DOMAIN_COMPOSITING_EXT
+                               ? "compositing"
+                               : "rendering",
+                     static_cast<int>(changed.fromLevel), static_cast<int>(changed.toLevel));
+            } else if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
+                const auto& changed =
+                    *reinterpret_cast<const XrEventDataReferenceSpaceChangePending*>(&event);
+                if (changed.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL) {
+                    space_change_time = changed.changeTime;
+                }
+            } else if (event.type == XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB) {
+                const auto& changed =
+                    *reinterpret_cast<const XrEventDataDisplayRefreshRateChangedFB*>(&event);
+                LOGI("display refresh rate %.0f -> %.0f Hz", changed.fromDisplayRefreshRate,
+                     changed.toDisplayRefreshRate);
+                host_status.refresh_rate = changed.toDisplayRefreshRate;
+            }
+            event = {XR_TYPE_EVENT_DATA_BUFFER};
+        }
+    }
+
+    void ApplySessionSettings() {
+        if (has_refresh_rate) {
+            const auto enumerate = GetFunction<PFN_xrEnumerateDisplayRefreshRatesFB>(
+                instance, "xrEnumerateDisplayRefreshRatesFB");
+            uint32_t count = 0;
+            if (enumerate != nullptr && XR_SUCCEEDED(enumerate(session, 0, &count, nullptr))) {
+                std::vector<float> rates(count);
+                enumerate(session, count, &count, rates.data());
+                std::string list;
+                for (uint32_t i = 0; i < count && i < rates.size(); ++i) {
+                    list += (list.empty() ? "" : ", ") + std::to_string(static_cast<int>(rates[i]));
+                }
+                LOGI("display refresh rates on offer: %s Hz", list.c_str());
+            }
+            const auto request = GetFunction<PFN_xrRequestDisplayRefreshRateFB>(
+                instance, "xrRequestDisplayRefreshRateFB");
+            if (request != nullptr && options.refresh_rate > 0.0f) {
+                Check(request(session, options.refresh_rate), "xrRequestDisplayRefreshRateFB");
+            } else if (request != nullptr) {
+                // The emulated headset refreshes when this display does, and the game draws
+                // one frame for every two refreshes where it manages that and one for every
+                // three where it does not (the emulator holds it to whole numbers). At 90 Hz
+                // that is 45 frames a second in light scenes and 30 in the levels, with room
+                // for the scene at the size the console draws it at; at 72 Hz the levels sit
+                // just beyond what two refreshes allow, and get the smallest picture and
+                // frames of uneven length for it.
+                for (const float rate : {90.0f, 80.0f, 72.0f}) {
+                    if (XR_SUCCEEDED(request(session, rate))) {
+                        break;
+                    }
+                }
+            }
+            const auto get = GetFunction<PFN_xrGetDisplayRefreshRateFB>(
+                instance, "xrGetDisplayRefreshRateFB");
+            float rate = 0.0f;
+            if (get != nullptr && XR_SUCCEEDED(get(session, &rate))) {
+                LOGI("display refresh rate %.0f Hz", rate);
+                host_status.refresh_rate = rate;
+            }
+        }
+        if (has_performance) {
+            // An emulator needs every cycle it can get, on both processors.
+            const auto set_level = GetFunction<PFN_xrPerfSettingsSetPerformanceLevelEXT>(
+                instance, "xrPerfSettingsSetPerformanceLevelEXT");
+            if (set_level != nullptr) {
+                const XrResult cpu = set_level(session, XR_PERF_SETTINGS_DOMAIN_CPU_EXT,
+                                               options.cpu_boost
+                                                   ? XR_PERF_SETTINGS_LEVEL_BOOST_EXT
+                                                   : XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT);
+                const XrResult gpu = set_level(session, XR_PERF_SETTINGS_DOMAIN_GPU_EXT,
+                                               XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT);
+                LOGI("performance levels asked for: processor %s -> %d, GPU sustained high -> %d "
+                     "(0 is accepted)",
+                     options.cpu_boost ? "boost" : "sustained high", static_cast<int>(cpu),
+                     static_cast<int>(gpu));
+            }
+        }
+        if (has_thread_settings) {
+            // This thread has to get its turn at every refresh. The emulator's threads cannot
+            // be named to the runtime: it only takes threads of the process that asks (those of
+            // a child are refused, see ProbeIdleSession), so their priorities are the
+            // emulator's own doing (SHADPS4_THREAD_NICE).
+            const auto set_thread = GetFunction<PFN_xrSetAndroidApplicationThreadKHR>(
+                instance, "xrSetAndroidApplicationThreadKHR");
+            if (set_thread != nullptr) {
+                const XrResult result =
+                    set_thread(session, XR_ANDROID_THREAD_TYPE_RENDERER_MAIN_KHR,
+                               static_cast<uint32_t>(::gettid()));
+                LOGI("thread hint for the frame loop: %d", static_cast<int>(result));
+            }
+        }
+    }
+
+    /// What a session that has not begun answers to the settings the host makes when one does.
+    void ProbeIdleSession() {
+        ApplySessionSettings();
+        const auto set_thread = GetFunction<PFN_xrSetAndroidApplicationThreadKHR>(
+            instance, "xrSetAndroidApplicationThreadKHR");
+        if (has_thread_settings && set_thread != nullptr) {
+            // A thread of another process of the app, which is what the emulator's threads are.
+            // (On Horizon OS 207: XR_ERROR_ANDROID_THREAD_SETTINGS_ID_INVALID_KHR.)
+            const pid_t child = ::fork();
+            if (child == 0) {
+                ::sleep(2);
+                ::_exit(0);
+            }
+            if (child > 0) {
+                const XrResult result =
+                    set_thread(session, XR_ANDROID_THREAD_TYPE_APPLICATION_WORKER_KHR,
+                               static_cast<uint32_t>(child));
+                ::waitpid(child, nullptr, 0);
+                LOGI("thread hint for a thread of a child process: %d", static_cast<int>(result));
+            }
+        }
+        ProbeBlit();
+        ProbePanel();
+        ProbeLayerSize();
+    }
+
+    /// Puts a picture on the status panel the way the app's text gets there, and looks at
+    /// what the panel's image holds afterwards: the upper half red, the lower half blue.
+    void ProbePanel() {
+        {
+            std::scoped_lock lock{status.mutex};
+            status.pixels.resize(size_t{StatusImage::Width} * StatusImage::Height * 4);
+            for (int y = 0; y < StatusImage::Height; ++y) {
+                for (int x = 0; x < StatusImage::Width; ++x) {
+                    uint8_t* pixel = status.pixels.data() + (size_t{StatusImage::Width} * y + x) * 4;
+                    const bool upper = y < StatusImage::Height / 2;
+                    pixel[0] = upper ? 200 : 30;
+                    pixel[1] = 30;
+                    pixel[2] = upper ? 30 : 200;
+                    pixel[3] = 255;
+                }
+            }
+            ++status.version;
+        }
+        status_ready = false;
+        UpdateStatusPanel();
+        if (!status_ready) {
+            LOGW("probe: the status panel's image could not be written");
+            return;
+        }
+        // Every image of the swapchain that has the picture now has it the right way up?
+        int matching = 0;
+        for (const GLuint framebuffer : status_swapchain.framebuffers) {
+            uint8_t top[4]{};
+            uint8_t bottom[4]{};
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+            glReadPixels(StatusImage::Width / 2, StatusImage::Height * 3 / 4, 1, 1, GL_RGBA,
+                         GL_UNSIGNED_BYTE, top);
+            glReadPixels(StatusImage::Width / 2, StatusImage::Height / 4, 1, 1, GL_RGBA,
+                         GL_UNSIGNED_BYTE, bottom);
+            if (top[0] > 190 && top[2] < 40 && bottom[2] > 190 && bottom[0] < 40) {
+                ++matching;
+            }
+        }
+        const GLenum error = glGetError();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        LOGI("probe: status panel written; %d of %zu images hold it the right way up (GL error "
+             "0x%x)",
+             matching, status_swapchain.framebuffers.size(), error);
+    }
+
+    /// What the system recommends for the game's layer while nothing is being shown.
+    void ProbeLayerSize() {
+        const auto convert = GetFunction<PFN_xrConvertTimespecTimeToTimeKHR>(
+            instance, "xrConvertTimespecTimeToTimeKHR");
+        if (get_layer_resolution == nullptr || !has_time_conversion || convert == nullptr) {
+            LOGI("probe: no recommended layer size to ask for");
+            return;
+        }
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        XrTime time = 0;
+        if (XR_FAILED(convert(instance, &now, &time))) {
+            return;
+        }
+        // A frame as the emulator would deliver it: looking straight ahead, the game's view.
+        Protocol::Frame frame{};
+        frame.orientation[3] = 1.0f;
+        frame.fov[0] = 1.207f;
+        frame.fov[1] = 1.181f;
+        frame.fov[2] = 1.263f;
+        frame.fov[3] = 1.263f;
+        XrCompositionLayerProjectionView views[2]{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},
+                                                  {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
+        XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+        FillProjection(frame, game_swapchain.width, game_swapchain.height, views, projection);
+        XrRecommendedLayerResolutionGetInfoMETA info{
+            XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_GET_INFO_META};
+        info.layer = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection);
+        info.predictedDisplayTime = time + 20'000'000;
+        XrRecommendedLayerResolutionMETA recommended{XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_META};
+        const XrResult result = get_layer_resolution(session, &info, &recommended);
+        LOGI("probe: recommended layer size for %ux%u an eye: %dx%d, valid %d (result %d)",
+             game_swapchain.width / 2, game_swapchain.height,
+             recommended.recommendedImageDimensions.width,
+             recommended.recommendedImageDimensions.height,
+             static_cast<int>(recommended.isValid), static_cast<int>(result));
+    }
+
+    /// Copies a test picture into the image the compositor would show, the way frames are, and
+    /// reads it back: the top left of a frame has to end up top left and in its own colours,
+    /// at full size and at the smaller size the picture is shown at while the GPU is short.
+    void ProbeBlit() {
+        // Four fields, first row on top as in the emulator's frames: red, green / blue, yellow.
+        constexpr int Width = 64;
+        constexpr int Height = 32;
+        static constexpr uint8_t Fields[4][3] = {
+            {200, 30, 30}, {30, 200, 30}, {30, 30, 200}, {200, 200, 30}};
+        std::vector<uint8_t> picture(Width * Height * 4);
+        for (int y = 0; y < Height; ++y) {
+            for (int x = 0; x < Width; ++x) {
+                const uint8_t* field = Fields[(y >= Height / 2 ? 2 : 0) + (x >= Width / 2 ? 1 : 0)];
+                uint8_t* pixel = picture.data() + (y * Width + x) * 4;
+                pixel[0] = field[0];
+                pixel[1] = field[1];
+                pixel[2] = field[2];
+                pixel[3] = 255;
+            }
+        }
+        GLuint texture = 0;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     picture.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        for (const float scale : {1.0f, MinLayerScale}) {
+            const auto width = static_cast<uint32_t>(static_cast<float>(game_swapchain.width) * scale);
+            const auto height =
+                static_cast<uint32_t>(static_cast<float>(game_swapchain.height) * scale);
+            uint32_t index = 0;
+            XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+            const XrResult acquired =
+                xrAcquireSwapchainImage(game_swapchain.handle, &acquire, &index);
+            if (XR_FAILED(acquired)) {
+                LOGW("probe: no swapchain image to be had outside a session (%d)",
+                     static_cast<int>(acquired));
+                break;
+            }
+            XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+            wait.timeout = 1'000'000'000;
+            const XrResult waited = xrWaitSwapchainImage(game_swapchain.handle, &wait);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, game_swapchain.framebuffers[index]);
+            blitter.Draw(texture, width, height, false, decode_srgb);
+            // Top left and bottom right field, as GL counts rows: from the bottom.
+            uint8_t top_left[4]{};
+            uint8_t bottom_right[4]{};
+            glReadPixels(static_cast<GLint>(width / 4), static_cast<GLint>(height * 3 / 4), 1, 1,
+                         GL_RGBA, GL_UNSIGNED_BYTE, top_left);
+            glReadPixels(static_cast<GLint>(width * 3 / 4), static_cast<GLint>(height / 4), 1, 1,
+                         GL_RGBA, GL_UNSIGNED_BYTE, bottom_right);
+            const GLenum error = glGetError();
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+            const XrResult released = xrReleaseSwapchainImage(game_swapchain.handle, &release);
+
+            const auto close = [](const uint8_t* seen, const uint8_t* expected) {
+                return std::abs(seen[0] - expected[0]) <= 3 && std::abs(seen[1] - expected[1]) <= 3 &&
+                       std::abs(seen[2] - expected[2]) <= 3;
+            };
+            const bool right = close(top_left, Fields[0]) && close(bottom_right, Fields[3]);
+            LOGI("probe: picture copied to swapchain image %u at %ux%u: top left %u,%u,%u and "
+                 "bottom right %u,%u,%u, %s (wait %d, release %d, GL error 0x%x)",
+                 index, width, height, top_left[0], top_left[1], top_left[2], bottom_right[0],
+                 bottom_right[1], bottom_right[2], right ? "as it should be" : "WRONG",
+                 static_cast<int>(waited), static_cast<int>(released), error);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDeleteTextures(1, &texture);
+    }
+
+    /// Has the compositor read a swapchain's images with the GPU's cubic filter where it
+    /// enlarges them. The game's picture has less than half as many pixels across as the
+    /// display has for it; a linear filter turns that into a blur.
+    void UseCubicSampling(const Swapchain& swapchain) {
+        // From IMG_texture_filter_cubic.
+        static constexpr EGLenum CubicImg = 0x9139;
+        const auto get_state =
+            GetFunction<PFN_xrGetSwapchainStateFB>(instance, "xrGetSwapchainStateFB");
+        const auto update =
+            GetFunction<PFN_xrUpdateSwapchainFB>(instance, "xrUpdateSwapchainFB");
+        if (get_state == nullptr || update == nullptr) {
+            return;
+        }
+        XrSwapchainStateSamplerOpenGLESFB sampler{XR_TYPE_SWAPCHAIN_STATE_SAMPLER_OPENGL_ES_FB};
+        const XrResult got = get_state(
+            swapchain.handle, reinterpret_cast<XrSwapchainStateBaseHeaderFB*>(&sampler));
+        if (XR_FAILED(got)) {
+            LOGW("the compositor does not tell how it reads the game's picture (%d)",
+                 static_cast<int>(got));
+            return;
+        }
+        const EGLenum before = sampler.magFilter;
+        sampler.magFilter = CubicImg;
+        const XrResult updated = update(
+            swapchain.handle, reinterpret_cast<const XrSwapchainStateBaseHeaderFB*>(&sampler));
+        LOGI("the compositor enlarges the game's picture with a cubic filter (was 0x%x): %s (%d)",
+             before, XR_SUCCEEDED(updated) ? "accepted" : "refused", static_cast<int>(updated));
+    }
+
+    /// Asks the system at what size it wants the game's picture: all of the image the frames
+    /// are copied to, or less of it while the GPU is short. That it is asked is what counts:
+    /// the system lets the GPU run faster for an app that gives way. The game gives way in the
+    /// size it draws its scene at, which is where the GPU's time goes; showing the finished
+    /// picture smaller saves nothing and blurs it, and is only done on request.
+    void UpdateLayerSize(XrTime display_time) {
+        if (get_layer_resolution == nullptr || !shown_frame) {
+            return;
+        }
+        // The question is about a layer: the one that would be shown at full size.
+        XrCompositionLayerProjectionView views[2]{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},
+                                                  {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
+        XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+        FillProjection(*shown_frame, game_swapchain.width, game_swapchain.height, views,
+                       projection);
+        XrRecommendedLayerResolutionGetInfoMETA info{
+            XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_GET_INFO_META};
+        info.layer = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection);
+        info.predictedDisplayTime = display_time;
+        XrRecommendedLayerResolutionMETA recommended{XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_META};
+        if (XR_FAILED(get_layer_resolution(session, &info, &recommended)) ||
+            recommended.isValid != XR_TRUE) {
+            return;
+        }
+        recommended_width = recommended.recommendedImageDimensions.width;
+        recommended_height = recommended.recommendedImageDimensions.height;
+        // One eye's size. Never more than there is, and not so little that it shows.
+        const float full_width = static_cast<float>(game_swapchain.width / 2);
+        const float full_height = static_cast<float>(game_swapchain.height);
+        const float scale = std::clamp(
+            std::min(static_cast<float>(recommended.recommendedImageDimensions.width) / full_width,
+                     static_cast<float>(recommended.recommendedImageDimensions.height) /
+                         full_height),
+            options.follow_layer_size ? MinLayerScale : 1.0f, 1.0f);
+        // In steps, so that it does not change with every frame.
+        const uint32_t eye_width =
+            std::min(game_swapchain.width / 2,
+                     (static_cast<uint32_t>(full_width * scale) + 15) / 16 * 16);
+        const uint32_t height =
+            std::min(game_swapchain.height,
+                     (static_cast<uint32_t>(full_height * scale) + 15) / 16 * 16);
+        if (!layer_size_logged) {
+            layer_size_logged = true;
+            LOGI("the system recommends %dx%d for an eye; the game's picture is shown at %ux%u",
+                 recommended.recommendedImageDimensions.width,
+                 recommended.recommendedImageDimensions.height, eye_width, height);
+        }
+        layer_width = eye_width * 2;
+        layer_height = height;
+    }
+
+    /// Copies the emulator's frame into the image the compositor shows.
+    bool BlitFrame(const Protocol::Frame& frame) {
+        if (!frames.IsValid(frame.buffer)) {
+            return false;
+        }
+        uint32_t index = 0;
+        XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+        if (XR_FAILED(xrAcquireSwapchainImage(game_swapchain.handle, &acquire, &index))) {
+            return false;
+        }
+        XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+        wait.timeout = XR_INFINITE_DURATION;
+        xrWaitSwapchainImage(game_swapchain.handle, &wait);
+
+        // Into the lower left corner when the picture is to be smaller than the image.
+        glBindFramebuffer(GL_FRAMEBUFFER, game_swapchain.framebuffers[index]);
+        blitter.Draw(frames.Texture(frame.buffer), layer_width, layer_height,
+                     frame.swap_red_blue != 0, decode_srgb);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        shown_width = layer_width;
+        shown_height = layer_height;
+
+        XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+        xrReleaseSwapchainImage(game_swapchain.handle, &release);
+        return true;
+    }
+
+    void UpdateStatusPanel() {
+        std::vector<uint8_t> pixels;
+        {
+            std::scoped_lock lock{status.mutex};
+            if (status.version == status_version || status.pixels.empty()) {
+                return;
+            }
+            pixels = status.pixels;
+            status_version = status.version;
+        }
+        uint32_t index = 0;
+        XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+        if (XR_FAILED(xrAcquireSwapchainImage(status_swapchain.handle, &acquire, &index))) {
+            return;
+        }
+        XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+        wait.timeout = XR_INFINITE_DURATION;
+        xrWaitSwapchainImage(status_swapchain.handle, &wait);
+
+        // Bitmaps start at the top, GL textures at the bottom.
+        const size_t row_bytes = size_t{StatusImage::Width} * 4;
+        std::vector<uint8_t> flipped(pixels.size());
+        for (int y = 0; y < StatusImage::Height; ++y) {
+            std::memcpy(flipped.data() + y * row_bytes,
+                        pixels.data() + (StatusImage::Height - 1 - y) * row_bytes, row_bytes);
+        }
+        glBindTexture(GL_TEXTURE_2D, status_swapchain.images[index].image);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, StatusImage::Width, StatusImage::Height, GL_RGBA,
+                        GL_UNSIGNED_BYTE, flipped.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+        xrReleaseSwapchainImage(status_swapchain.handle, &release);
+        status_ready = true;
+    }
+
+    void Loop() {
+        while (!quit && !exit_requested) {
+            PollEvents();
+            if (!session_running) {
+                if (options.probe && !probed) {
+                    probed = true;
+                    ProbeIdleSession();
+                }
+                usleep(50'000);
+                continue;
+            }
+
+            XrFrameState frame_state{XR_TYPE_FRAME_STATE};
+            if (const XrResult waited = xrWaitFrame(session, nullptr, &frame_state);
+                XR_FAILED(waited)) {
+                NoteFrameFailure("xrWaitFrame", waited);
+                usleep(5'000);
+                continue;
+            }
+            // The runtime lets go of xrWaitFrame once for every refresh of the display, at
+            // the same point of each: the emulated headset takes its own refreshes from that.
+            if (host_status.refresh_rate > 0.0f) {
+                core.SendRefresh(host_status.refresh_rate);
+            }
+            if (const XrResult begun = xrBeginFrame(session, nullptr); XR_FAILED(begun)) {
+                NoteFrameFailure("xrBeginFrame", begun);
+                continue;
+            }
+
+            const XrTime pose_time =
+                frame_state.predictedDisplayTime +
+                static_cast<XrTime>(std::clamp(options.predict_ms, 0.0f, 80.0f) * 1e6f);
+            SendHeadPose(pose_time);
+            SendPadPose(pose_time);
+            UpdateLayerSize(frame_state.predictedDisplayTime);
+
+            const auto now = std::chrono::steady_clock::now();
+            if (const auto frame = core.TakeFrame()) {
+                if (BlitFrame(*frame)) {
+                    shown_frame = *frame;
+                    last_frame_time = now;
+                    ++frame_count;
+                }
+            }
+            ReportPacing(now);
+            UpdateStatusPanel();
+
+            // The panel covers boot, loading screens that last, and a core that died.
+            const bool stale = !shown_frame ||
+                               now - last_frame_time > std::chrono::milliseconds{2500};
+
+            XrCompositionLayerProjectionView views[2]{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},
+                                                      {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
+            XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+            XrCompositionLayerSettingsFB layer_settings{XR_TYPE_COMPOSITION_LAYER_SETTINGS_FB};
+            XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
+            std::vector<const XrCompositionLayerBaseHeader*> layers;
+
+            if (frame_state.shouldRender == XR_TRUE) {
+                if (shown_frame) {
+                    FillProjection(*shown_frame, shown_width, shown_height, views, projection);
+                    if (has_layer_settings) {
+                        // The game draws fewer pixels per degree than the display has.
+                        layer_settings.layerFlags =
+                            options.sharpen == 4
+                                ? XR_COMPOSITION_LAYER_SETTINGS_NORMAL_SHARPENING_BIT_FB
+                                : XR_COMPOSITION_LAYER_SETTINGS_QUALITY_SHARPENING_BIT_FB;
+                        if (has_auto_filter) {
+                            layer_settings.layerFlags |=
+                                XR_COMPOSITION_LAYER_SETTINGS_AUTO_LAYER_FILTER_BIT_META;
+                        }
+                        projection.next = &layer_settings;
+                    }
+                    layers.push_back(
+                        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection));
+                }
+                if ((stale || options.show_stats) && status_ready) {
+                    quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+                    quad.space = view_space;
+                    quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+                    quad.subImage.swapchain = status_swapchain.handle;
+                    quad.subImage.imageRect.extent = {StatusImage::Width, StatusImage::Height};
+                    quad.pose.orientation.w = 1.0f;
+                    if (stale) {
+                        quad.pose.position = {0.0f, 0.0f, -1.6f};
+                        quad.size = {1.4f, 0.7f};
+                    } else {
+                        // Over the game: out of the way of what is being played.
+                        quad.pose.position = {0.0f, -0.55f, -1.6f};
+                        quad.size = {0.56f, 0.28f};
+                    }
+                    layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad));
+                }
+            }
+
+            XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
+            end.displayTime = frame_state.predictedDisplayTime;
+            end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+            end.layerCount = static_cast<uint32_t>(layers.size());
+            end.layers = layers.data();
+            if (const XrResult ended = xrEndFrame(session, &end); XR_FAILED(ended)) {
+                // A layer the runtime does not accept is a frame nobody sees.
+                NoteFrameFailure("xrEndFrame", ended);
+            } else if (!layers.empty() && !shown_logged) {
+                shown_logged = true;
+                LOGI("first frame handed to the compositor: %zu layer(s), %s", layers.size(),
+                     shown_frame ? "the game's picture" : "the status panel");
+            } else if (shown_frame && !game_shown_logged && !layers.empty()) {
+                game_shown_logged = true;
+                LOGI("the game's first picture handed to the compositor: %ux%u an eye, field of "
+                     "view %.1f/%.1f/%.1f/%.1f degrees (out, in, up, down)",
+                     shown_width / 2, shown_height,
+                     std::atan(shown_frame->fov[0]) * 57.29578f,
+                     std::atan(shown_frame->fov[1]) * 57.29578f,
+                     std::atan(shown_frame->fov[2]) * 57.29578f,
+                     std::atan(shown_frame->fov[3]) * 57.29578f);
+            }
+        }
+    }
+
+    /// Frame calls that fail are frames nobody sees, and nothing else would tell: the first
+    /// few go to the log, then every thousandth.
+    void NoteFrameFailure(const char* what, XrResult result) {
+        ++frame_failures;
+        if (frame_failures <= 5 || frame_failures % 1000 == 0) {
+            LOGE("%s failed: %d (%u frame calls failed so far)", what, static_cast<int>(result),
+                 frame_failures);
+        }
+    }
+
+    /// Every ten seconds: how many frames the game delivered against how many the headset
+    /// showed (the first number over the second is how much of the motion is the game's own),
+    /// what the emulator used to get there, and what was seen of the hands and the controller
+    /// they hold.
+    void ReportPacing(std::chrono::steady_clock::time_point now) {
+        ++display_frames;
+        if (now - last_report < std::chrono::seconds{10}) {
+            return;
+        }
+        const float seconds = std::chrono::duration<float>(now - last_report).count();
+        const CoreProcess::Usage usage = core.GetUsage();
+        LOGI("pacing: game %.1f fps, display %.1f Hz; emulator %.0f%% of a processor on %s, "
+             "%d MB; head tracked %.0f%%; picture shown at %ux%u an eye (the system recommends "
+             "%dx%d)",
+             static_cast<float>(frame_count - reported_frames) / seconds,
+             static_cast<float>(display_frames) / seconds,
+             (usage.cpu_seconds - reported_cpu_seconds) * 100.0 / seconds,
+             usage.cpus.empty() ? "?" : usage.cpus.c_str(), usage.memory_mb,
+             100.0f * static_cast<float>(head_tracked_frames) / static_cast<float>(display_frames),
+             shown_width / 2, shown_height, recommended_width, recommended_height);
+        if (head_tracked_frames != 0) {
+            // Where the head is in the headset's own space, which the emulator counts from the
+            // player's seat: a view that is off shows here as a head that has moved away from
+            // where it was when the view was last reset.
+            const XrVector3f forward = Rotate(head_pose.orientation, {0.0f, 0.0f, -1.0f});
+            LOGI("head: at %.2f %.2f %.2f of the headset's space (right, up, back), within "
+                 "%.2f %.2f %.2f of it these ten seconds; facing %.0f degrees to the left of its "
+                 "straight ahead, %.0f up",
+                 head_pose.position.x, head_pose.position.y, head_pose.position.z,
+                 head_high.x - head_low.x, head_high.y - head_low.y, head_high.z - head_low.z,
+                 std::atan2(-forward.x, -forward.z) * 57.29578f,
+                 std::asin(std::clamp(forward.y, -1.0f, 1.0f)) * 57.29578f);
+        }
+        if (has_hand_tracking) {
+            // Where the controller was taken to be, seen from the head: to the right, up and
+            // forward of it. The game's first screen wants it around 0, -0.17, 0.50.
+            const float palms = palm_samples != 0 ? palm_distance / palm_samples : 0.0f;
+            const float held = pad_samples != 0 ? 1.0f / static_cast<float>(pad_samples) : 0.0f;
+            LOGI("hands: both seen %.0f%% of the time, %.2f m apart; holding the controller "
+                 "%.0f%%, on average %.2f right, %.2f up, %.2f ahead of the head",
+                 100.0f * static_cast<float>(palm_samples) / static_cast<float>(display_frames),
+                 palms,
+                 100.0f * static_cast<float>(pad_samples) / static_cast<float>(display_frames),
+                 pad_from_head.x * held, pad_from_head.y * held, -pad_from_head.z * held);
+        }
+        ReportMetrics();
+        reported_frames = frame_count;
+        reported_cpu_seconds = usage.cpu_seconds;
+        display_frames = 0;
+        head_tracked_frames = 0;
+        palm_samples = 0;
+        palm_distance = 0.0f;
+        pad_samples = 0;
+        pad_from_head = {};
+        last_report = now;
+    }
+
+    void SendHeadPose(XrTime display_time) {
+        XrSpaceVelocity velocity{XR_TYPE_SPACE_VELOCITY};
+        XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
+        location.next = &velocity;
+        if (XR_SUCCEEDED(xrLocateSpace(view_space, local_space, display_time, &location)) &&
+            (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0 &&
+            (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0) {
+            Protocol::Pose pose;
+            pose.position[0] = location.pose.position.x;
+            pose.position[1] = location.pose.position.y;
+            pose.position[2] = location.pose.position.z;
+            pose.orientation[0] = location.pose.orientation.x;
+            pose.orientation[1] = location.pose.orientation.y;
+            pose.orientation[2] = location.pose.orientation.z;
+            pose.orientation[3] = location.pose.orientation.w;
+            if ((velocity.velocityFlags & XR_SPACE_VELOCITY_LINEAR_VALID_BIT) != 0) {
+                pose.linear_velocity[0] = velocity.linearVelocity.x;
+                pose.linear_velocity[1] = velocity.linearVelocity.y;
+                pose.linear_velocity[2] = velocity.linearVelocity.z;
+            }
+            if ((velocity.velocityFlags & XR_SPACE_VELOCITY_ANGULAR_VALID_BIT) != 0) {
+                pose.angular_velocity[0] = velocity.angularVelocity.x;
+                pose.angular_velocity[1] = velocity.angularVelocity.y;
+                pose.angular_velocity[2] = velocity.angularVelocity.z;
+            }
+            core.SendPose(pose);
+            head_pose = location.pose;
+            if (head_tracked_frames == 0) {
+                head_low = head_high = location.pose.position;
+            }
+            head_low = {std::min(head_low.x, location.pose.position.x),
+                        std::min(head_low.y, location.pose.position.y),
+                        std::min(head_low.z, location.pose.position.z)};
+            head_high = {std::max(head_high.x, location.pose.position.x),
+                         std::max(head_high.y, location.pose.position.y),
+                         std::max(head_high.z, location.pose.position.z)};
+            ++head_tracked_frames;
+        }
+
+        // The distance between the eyes follows the headset's lens adjustment.
+        XrViewLocateInfo locate{XR_TYPE_VIEW_LOCATE_INFO};
+        locate.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+        locate.displayTime = display_time;
+        locate.space = view_space;
+        XrViewState view_state{XR_TYPE_VIEW_STATE};
+        XrView eye_views[2]{{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
+        uint32_t view_count = 0;
+        if (XR_SUCCEEDED(xrLocateViews(session, &locate, &view_state, 2, &view_count, eye_views)) &&
+            view_count == 2 &&
+            (view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0) {
+            const float dx = eye_views[1].pose.position.x - eye_views[0].pose.position.x;
+            const float dy = eye_views[1].pose.position.y - eye_views[0].pose.position.y;
+            const float dz = eye_views[1].pose.position.z - eye_views[0].pose.position.z;
+            const float measured = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (std::abs(measured - ipd) > 0.0002f || ++frames_since_optics > 300) {
+                ipd = measured;
+                frames_since_optics = 0;
+                core.SendOptics(ipd);
+            }
+        }
+    }
+
+    /// Where the palm of a hand is, if the headset sees it.
+    std::optional<XrVector3f> LocatePalm(int hand, XrTime time) {
+        XrHandJointLocationEXT joints[XR_HAND_JOINT_COUNT_EXT];
+        XrHandJointLocationsEXT locations{XR_TYPE_HAND_JOINT_LOCATIONS_EXT};
+        locations.jointCount = XR_HAND_JOINT_COUNT_EXT;
+        locations.jointLocations = joints;
+        XrHandJointsLocateInfoEXT info{XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT};
+        info.baseSpace = local_space;
+        info.time = time;
+        if (XR_FAILED(locate_hand_joints(hand_trackers[hand], &info, &locations)) ||
+            locations.isActive != XR_TRUE) {
+            return std::nullopt;
+        }
+        const auto& palm = joints[XR_HAND_JOINT_PALM_EXT];
+        if ((palm.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) == 0) {
+            return std::nullopt;
+        }
+        return palm.pose.position;
+    }
+
+    /// A gamepad cannot be tracked, the hands that hold it can: both palms a controller's width
+    /// apart give away where it is and which way it points.
+    void SendPadPose(XrTime display_time) {
+        Protocol::PadPose message;
+        const uint32_t requests = recenter_requests.exchange(0);
+        if ((requests & XrRecenter::Pad) != 0) {
+            message.flags |= Protocol::PadPose::RecenterYaw;
+        }
+        // The headset's own "reset view" moves the space the poses are given in: from the
+        // moment it says, the head is where it rests, and the emulator has to hear of it.
+        const bool system_reset = space_change_time != 0 && display_time >= space_change_time;
+        if (system_reset) {
+            space_change_time = 0;
+        }
+        if ((requests & XrRecenter::Seat) != 0 || system_reset) {
+            message.flags |= Protocol::PadPose::RecenterSeat;
+            LOGI("view reset: %s", system_reset ? "the headset's own" : "asked for by the player");
+        }
+
+        bool seen = false;
+        if (options.touch_controllers) {
+            seen = touch.Read(display_time, core, message);
+            if (seen || pad_seen || message.flags != 0) {
+                core.SendPadPose(message);
+            }
+            pad_seen = seen;
+            host_status.hands_tracked = seen;
+            return;
+        }
+        if (has_hand_tracking) {
+            const auto left = LocatePalm(0, display_time);
+            const auto right = LocatePalm(1, display_time);
+            if (left && right) {
+                const XrVector3f across{right->x - left->x, right->y - left->y,
+                                        right->z - left->z};
+                const float distance =
+                    std::sqrt(across.x * across.x + across.y * across.y + across.z * across.z);
+                ++palm_samples;
+                palm_distance += distance;
+                // Hands further apart, or closer together, are not holding a controller.
+                if (distance > 0.05f && distance < 0.32f) {
+                    XrVector3f centre{(left->x + right->x) * 0.5f, (left->y + right->y) * 0.5f,
+                                      (left->z + right->z) * 0.5f};
+                    const float level = std::sqrt(across.x * across.x + across.z * across.z);
+                    if (level > 0.6f * distance) {
+                        // The line from the left to the right palm is the controller's
+                        // sideways axis; its heading follows from that.
+                        const float yaw = std::atan2(-across.z, across.x);
+                        message.yaw = yaw;
+                        message.flags |= Protocol::PadPose::YawValid;
+                        // The palms close around the grips, which sit behind and below the
+                        // middle of the controller.
+                        centre.x += -std::sin(yaw) * 0.035f;
+                        centre.z += -std::cos(yaw) * 0.035f;
+                    }
+                    centre.y += 0.015f;
+
+                    if (pad_seen && display_time > pad_time) {
+                        const float elapsed =
+                            static_cast<float>(display_time - pad_time) * 1e-9f;
+                        if (elapsed < 0.1f) {
+                            const float blend = 0.4f;
+                            pad_velocity.x +=
+                                ((centre.x - pad_position.x) / elapsed - pad_velocity.x) * blend;
+                            pad_velocity.y +=
+                                ((centre.y - pad_position.y) / elapsed - pad_velocity.y) * blend;
+                            pad_velocity.z +=
+                                ((centre.z - pad_position.z) / elapsed - pad_velocity.z) * blend;
+                        }
+                    } else {
+                        pad_velocity = {};
+                    }
+                    pad_position = centre;
+                    pad_time = display_time;
+
+                    // For the log: the same, as seen from the head.
+                    const XrQuaternionf to_head{-head_pose.orientation.x, -head_pose.orientation.y,
+                                                -head_pose.orientation.z, head_pose.orientation.w};
+                    const XrVector3f offset =
+                        Rotate(to_head, {centre.x - head_pose.position.x,
+                                         centre.y - head_pose.position.y,
+                                         centre.z - head_pose.position.z});
+                    pad_from_head.x += offset.x;
+                    pad_from_head.y += offset.y;
+                    pad_from_head.z += offset.z;
+                    ++pad_samples;
+
+                    message.flags |= Protocol::PadPose::PositionValid;
+                    message.position[0] = centre.x;
+                    message.position[1] = centre.y;
+                    message.position[2] = centre.z;
+                    message.linear_velocity[0] = pad_velocity.x;
+                    message.linear_velocity[1] = pad_velocity.y;
+                    message.linear_velocity[2] = pad_velocity.z;
+                    seen = true;
+                }
+            }
+        }
+
+        // While the hands are seen, every frame; once more when they are lost, so that the
+        // emulator stops trusting the last position.
+        if (seen || pad_seen || message.flags != 0) {
+            core.SendPadPose(message);
+        }
+        pad_seen = seen;
+        host_status.hands_tracked = seen;
+    }
+
+    /// Describes the shown frame to the compositor: where the head was when the emulator drew
+    /// it and with what field of view, so that it can be corrected for how the head has moved.
+    /// `width` by `height` is the part of the image the frame (both eyes) was copied to.
+    void FillProjection(const Protocol::Frame& frame, uint32_t width, uint32_t height,
+                        XrCompositionLayerProjectionView* views,
+                        XrCompositionLayerProjection& projection) const {
+        // The runtime refuses a layer whose orientation is not a rotation, and with it the
+        // whole frame: whatever arrives is brought to length one, and nothing usable becomes
+        // "straight ahead".
+        XrQuaternionf orientation{frame.orientation[0], frame.orientation[1],
+                                  frame.orientation[2], frame.orientation[3]};
+        const float length =
+            std::sqrt(orientation.x * orientation.x + orientation.y * orientation.y +
+                      orientation.z * orientation.z + orientation.w * orientation.w);
+        if (std::isfinite(length) && length > 0.5f) {
+            orientation = {orientation.x / length, orientation.y / length, orientation.z / length,
+                           orientation.w / length};
+        } else {
+            orientation = {0.0f, 0.0f, 0.0f, 1.0f};
+        }
+        const float angle_out = std::atan(frame.fov[0]);
+        const float angle_in = std::atan(frame.fov[1]);
+        const float angle_up = std::atan(frame.fov[2]);
+        const float angle_down = std::atan(frame.fov[3]);
+        const int32_t eye_width = static_cast<int32_t>(width / 2);
+
+        for (int eye = 0; eye < 2; ++eye) {
+            const float side = eye == 0 ? -0.5f : 0.5f;
+            const XrVector3f offset = Rotate(orientation, {side * ipd, 0.0f, 0.0f});
+            views[eye].pose.orientation = orientation;
+            views[eye].pose.position = {frame.position[0] + offset.x,
+                                        frame.position[1] + offset.y,
+                                        frame.position[2] + offset.z};
+            // "Out" is towards the temple: left for the left eye, right for the right one.
+            views[eye].fov.angleLeft = eye == 0 ? -angle_out : -angle_in;
+            views[eye].fov.angleRight = eye == 0 ? angle_in : angle_out;
+            views[eye].fov.angleUp = angle_up;
+            views[eye].fov.angleDown = -angle_down;
+            views[eye].subImage.swapchain = game_swapchain.handle;
+            views[eye].subImage.imageRect.offset = {eye * eye_width, 0};
+            views[eye].subImage.imageRect.extent = {eye_width, static_cast<int32_t>(height)};
+        }
+        projection.space = local_space;
+        projection.viewCount = 2;
+        projection.views = views;
+    }
+
+    void Shutdown() {
+        core.SetTouchPad({}, false);
+        touch.Destroy();
+        frames.Destroy(gl.display);
+        blitter.Destroy();
+        if (instance != XR_NULL_HANDLE) {
+            const auto destroy_hand_tracker =
+                GetFunction<PFN_xrDestroyHandTrackerEXT>(instance, "xrDestroyHandTrackerEXT");
+            for (XrHandTrackerEXT tracker : hand_trackers) {
+                if (tracker != XR_NULL_HANDLE && destroy_hand_tracker != nullptr) {
+                    destroy_hand_tracker(tracker);
+                }
+            }
+        }
+        for (Swapchain* swapchain : {&game_swapchain, &status_swapchain}) {
+            if (swapchain->handle != XR_NULL_HANDLE) {
+                xrDestroySwapchain(swapchain->handle);
+            }
+        }
+        if (local_space != XR_NULL_HANDLE) {
+            xrDestroySpace(local_space);
+        }
+        if (view_space != XR_NULL_HANDLE) {
+            xrDestroySpace(view_space);
+        }
+        if (session != XR_NULL_HANDLE) {
+            xrDestroySession(session);
+        }
+        if (instance != XR_NULL_HANDLE) {
+            xrDestroyInstance(instance);
+        }
+        gl.Destroy();
+    }
+
+    JavaVM* vm;
+    TouchInput touch;
+    jobject activity;
+    CoreProcess& core;
+    StatusImage& status;
+    XrHostOptions options;
+    XrHostStatus& host_status;
+    std::atomic<bool>& quit;
+    std::atomic<uint32_t>& recenter_requests;
+
+    GlContext gl;
+
+    XrInstance instance{XR_NULL_HANDLE};
+    XrSystemId system{XR_NULL_SYSTEM_ID};
+    XrSession session{XR_NULL_HANDLE};
+    XrSpace local_space{XR_NULL_HANDLE};
+    XrSpace view_space{XR_NULL_HANDLE};
+    bool has_refresh_rate{};
+    bool has_swapchain_state{};
+    int32_t recommended_width{};
+    int32_t recommended_height{};
+    bool has_performance{};
+    bool has_thread_settings{};
+    bool has_layer_settings{};
+    bool has_auto_filter{};
+    bool has_hand_tracking{};
+    bool has_layer_resolution{};
+    bool has_metrics{};
+    bool has_time_conversion{};
+    bool session_running{};
+    bool exit_requested{};
+    bool probed{};
+    uint32_t frame_failures{};
+    bool shown_logged{};
+    bool game_shown_logged{};
+    uint32_t max_swapchain_width{};
+
+    XrHandTrackerEXT hand_trackers[2]{XR_NULL_HANDLE, XR_NULL_HANDLE};
+    PFN_xrLocateHandJointsEXT locate_hand_joints{};
+    /// When the headset's system redefines the space poses are given in (its "reset view"),
+    /// or 0.
+    XrTime space_change_time{};
+    bool pad_seen{};
+    XrVector3f pad_position{};
+    XrVector3f pad_velocity{};
+    XrTime pad_time{};
+
+    struct Metric {
+        XrPath path;
+        std::string name;
+    };
+    std::vector<Metric> metrics;
+    PFN_xrQueryPerformanceMetricsCounterMETA query_metric{};
+
+
+    /// The least of the image the game's picture is shown at, whatever the system recommends.
+    static constexpr float MinLayerScale = 0.85f;
+    PFN_xrGetRecommendedLayerResolutionMETA get_layer_resolution{};
+    bool layer_size_logged{};
+    /// The part of the game's image the next frame is copied to, and the part the frame that
+    /// is being shown was copied to: both eyes, side by side from the lower left corner.
+    uint32_t layer_width{};
+    uint32_t layer_height{};
+    uint32_t shown_width{};
+    uint32_t shown_height{};
+
+    int64_t swapchain_format{FormatRgba8};
+    bool decode_srgb{};
+    Swapchain game_swapchain;
+    Swapchain status_swapchain;
+    FrameBlitter blitter;
+    FrameBuffers frames;
+
+    std::optional<Protocol::Frame> shown_frame;
+    std::chrono::steady_clock::time_point last_frame_time{};
+    std::chrono::steady_clock::time_point last_report{std::chrono::steady_clock::now()};
+    uint32_t frame_count{};
+    uint32_t reported_frames{};
+    uint32_t display_frames{};
+    double reported_cpu_seconds{};
+    // What the log says of the last ten seconds.
+    XrPosef head_pose{{0.0f, 0.0f, 0.0f, 1.0f}, {}};
+    // The corners of the box the head stayed in since the last report.
+    XrVector3f head_low{};
+    XrVector3f head_high{};
+    uint32_t head_tracked_frames{};
+    uint32_t palm_samples{};
+    float palm_distance{};
+    uint32_t pad_samples{};
+    XrVector3f pad_from_head{};
+    uint64_t status_version{};
+    bool status_ready{};
+    float ipd{0.063f};
+    uint32_t frames_since_optics{};
+};
+
+} // namespace
+
+void RunXrHost(JavaVM* vm, jobject activity, CoreProcess& core, StatusImage& status,
+               const XrHostOptions& options, XrHostStatus& host_status, std::atomic<bool>& quit,
+               std::atomic<uint32_t>& recenter_requests) {
+    Host host{vm, activity, core, status, options, host_status, quit, recenter_requests};
+    host.Run();
+}

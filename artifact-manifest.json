@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "upstream_commit": "9f42c44d4e838e3a0df67913e350c4f098110862",
+  "game_assets_included": false,
+  "release_defaults": {
+    "pc_scale": 100,
+    "quest_scale": 100
+  },
+  "recommended_tested_profiles": {
+    "pc": 150,
+    "quest": 110
+  },
+  "acceptance": "User headset image/tracking/basic controls; PC150 quality good, Quest110 acceptable with jaggies, Quest125 stutters. No quantitative FPS or full-story acceptance.",
+  "known_issue": "A recent PC150 ending session recorded 0xC0000005; cause not established.",
+  "artifacts": [
+    {
+      "name": "FGO-VR-0.2.0-PCVR-Windows.zip",
+      "bytes": 68461030,
+      "sha256": "109e6f561d0a5170694f28f88d5ea2a97df514518df1a8abdba80e45974fb0c1"
+    },
+    {
+      "name": "FGO-VR-0.2.0-Quest3.apk",
+      "bytes": 46670646,
+      "sha256": "4a2864ba007c98f50379dc0f4d57cbc7b95b72104d4544cb66f12802f30ca754"
+    }
+  ]
+}

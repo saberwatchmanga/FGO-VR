@@ -1,0 +1,502 @@
+diff --git a/shadps4-arm64-main/src/core/known_title.cpp b/shadps4-arm64-main/src/core/known_title.cpp
+index fe8ae79..2edf6d5 100644
+--- a/shadps4-arm64-main/src/core/known_title.cpp
++++ b/shadps4-arm64-main/src/core/known_title.cpp
+@@ -30,6 +30,105 @@ namespace {
+ 
+ using Clock = std::chrono::steady_clock;
+ 
++// FGO VR uses Unity's native renderScale to size its eye render targets. This is
++// independent of the viewport scale and of the OpenXR compositor's output size.
++// Override only its canonical 1.4f managed request so Unity allocates matching color,
++// depth and intermediate targets through its own allocator. The game later requests
++// 1.4 itself; changing the constructor alone is overwritten. Never patch the PKG.
++float FgoRenderScale() {
++    static const float scale = [] {
++        const char* raw = std::getenv("SHADPS4_FGO_RENDER_SCALE");
++        const std::string_view value = raw != nullptr ? raw : "100";
++        if (value == "100" || value == "off") return 1.0f;
++        if (value == "110") return 1.10f;
++        if (value == "125") return 1.25f;
++#ifndef __aarch64__
++        if (value == "150") return 1.50f;
++#endif
++        LOG_WARNING(Core, "FGO resolution: unsupported setting '{}'; patch disabled", value);
++        return 1.0f;
++    }();
++    return scale;
++}
++
++void PatchFgoRenderScale(VAddr base, u64 size) {
++    if (Common::ElfInfo::Instance().GameSerial() != "CUSA09078") return;
++    const float scale = FgoRenderScale();
++    if (scale == 1.0f) {
++        LOG_INFO(Core, "FGO resolution: OFF, original Unity renderScale (no guest changes)");
++        return;
++    }
++    const auto version = Common::ElfInfo::Instance().AppVer();
++    // 01.01 updates assets only; both verified versions share this executable.
++    if (version != "01.00" && version != "01.01") {
++        LOG_WARNING(Core, "FGO resolution: unverified app version '{}'; patch disabled", version);
++        return;
++    }
++    constexpr u64 Constructor = 0xeb7314;
++    constexpr u8 ConstructorCode[] = {
++        0x41,0xc7,0x87,0xc0,0x01,0x00,0x00,0x00,0x00,0x80,0x3f,
++        0x41,0xc7,0x87,0xc4,0x01,0x00,0x00,0x00,0x00,0x80,0x3f};
++    constexpr u64 Getter = 0xebae30;
++    constexpr u8 GetterCode[] = {
++        0x48,0x8b,0x05,0xc9,0xa7,0x5a,0x00,0xc5,0xf8,0x57,0xc0,
++        0x48,0x85,0xc0,0x74,0x08,0xc5,0xfa,0x10,0x80,0xc0,0x01,0x00,0x00,0xc3};
++    constexpr u64 Setter = 0xeab626;
++    constexpr u8 SetterCode[] = {0xc5,0xfa,0x11,0x83,0xc0,0x01,0x00,0x00};
++    constexpr u64 Name = 0x11f0f6e;
++    constexpr char BindingName[] = "UnityEngine.VR.VRSettings::get_renderScale";
++    constexpr u64 Wrapper = 0xebae50;
++    constexpr u8 WrapperCode[] = {
++        0x48,0x8b,0x3d,0xa9,0xa7,0x5a,0x00,0x48,0x85,0xff,0x74,0x05,
++        0xe9,0x3f,0x07,0xff,0xff,0xc3,
++        0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90};
++    // Preflight EVERY signature before writing anything. Other builds stay intact.
++    if (size < Name + sizeof(BindingName) ||
++        std::memcmp(reinterpret_cast<const void*>(base + Constructor), ConstructorCode,
++                    sizeof(ConstructorCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Getter), GetterCode,
++                    sizeof(GetterCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Setter), SetterCode,
++                    sizeof(SetterCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Wrapper), WrapperCode,
++                    sizeof(WrapperCode)) != 0 ||
++        std::memcmp(reinterpret_cast<const void*>(base + Name), BindingName,
++                    sizeof(BindingName)) != 0) {
++        LOG_WARNING(Core, "FGO resolution: executable signatures do not match; patch disabled");
++        return;
++    }
++    // The first executable PT_LOAD ends at 0x138fbe0. This unused zero padding is
++    // inside that segment's last mapped executable page, before the next segment at
++    // 0x1390000. Verify it too before either write; no file or guest allocation changes.
++    constexpr u64 Trampoline = 0x138fc00;
++    constexpr std::array<u8, 28> Empty{};
++    if (size < Trampoline + Empty.size() ||
++        std::memcmp(reinterpret_cast<const void*>(base + Trampoline), Empty.data(),
++                    Empty.size()) != 0) {
++        LOG_WARNING(Core, "FGO resolution: executable padding differs; patch disabled");
++        return;
++    }
++    // movd eax,xmm0; cmp eax,1.4f bits; jne original; movss xmm0,[chosen];
++    // jmp native setter. RAX is caller-saved and not an argument to this wrapper.
++    // A read-back value or a lower/different request is passed through, so repeated
++    // getter/setter restoration cannot compound the scale or suppress game reductions.
++    std::array<u8, 28> code{
++        0x66,0x0f,0x7e,0xc0,0x3d,0x33,0x33,0xb3,0x3f,0x75,0x08,
++        0xf3,0x0f,0x10,0x05,0x05,0,0,0,0xe9,0,0,0,0,0,0,0,0};
++    constexpr s32 to_native = static_cast<s32>(s64{0xeab5a0} - static_cast<s64>(Trampoline + 24));
++    constexpr s32 to_trampoline = static_cast<s32>(static_cast<s64>(Trampoline) -
++                                                  static_cast<s64>(Wrapper + 17));
++    const float requested = 1.4f * scale;
++    std::memcpy(code.data() + 20, &to_native, sizeof(to_native));
++    std::memcpy(code.data() + 24, &requested, sizeof(requested));
++    std::memcpy(reinterpret_cast<void*>(base + Trampoline), code.data(), code.size());
++    // Retain Unity's original manager guard, return, and all neighboring instructions.
++    std::memcpy(reinterpret_cast<void*>(base + Wrapper + 13), &to_trampoline,
++                sizeof(to_trampoline));
++    LOG_INFO(Core, "FGO resolution: canonical Unity renderScale 1.4 -> {:.2f} ({:.2f}x), "
++                   "approximately {:.0f}% of original pixels; other requests and viewport unchanged",
++             requested, scale, scale * scale * 100.0f);
++}
++
+ // Astro Bot Rescue Mission, CUSA12392, in the build whose code at SetRecentre reads as below
+ // (the function of its tracking manager that asks for the head's position to be taken anew).
+ constexpr u64 SetRecentre = 0xc48320;
+@@ -758,6 +857,7 @@ void Prepare() {
+ }
+ 
+ void OnGameLoaded(VAddr base, u64 size) {
++    PatchFgoRenderScale(base, size);
+     if (Common::ElfInfo::Instance().GameSerial() != "CUSA12392" || size < ImageEnd ||
+         std::memcmp(reinterpret_cast<const void*>(base + SetRecentre), SetRecentreCode,
+                     sizeof(SetRecentreCode)) != 0) {
+diff --git a/shadps4-arm64-main/src/core/libraries/hmd/hmd.h b/shadps4-arm64-main/src/core/libraries/hmd/hmd.h
+index cb78962..8534a8f 100644
+--- a/shadps4-arm64-main/src/core/libraries/hmd/hmd.h
++++ b/shadps4-arm64-main/src/core/libraries/hmd/hmd.h
+@@ -114,7 +114,26 @@ struct OrbisHmdReprojectionTrackerState {
+ };
+ 
+ // Reprojection
+-s32 PS4_SYSV_ABI sceHmdReprojectionStartMultilayer();
++// Recovered from CUSA09078's caller (eboot 0xf40a98) and the live HLE argument dump.
++// Layers are inline records, NOT an array of texture/layer pointers. Unused fields remain
++// opaque until their semantics are observed; this layout is not an SDK declaration.
++struct OrbisHmdReprojectionLayer {
++    const void* texture[2];
++    const void* depth_texture[2];
++    const void* sampler;
++    OrbisHmdReprojectionEyeUv uv[4];
++    u64 unknown_68;
++    u64 unknown_70;
++    u32 flags;
++    u8 reserved[0x2c];
++};
++static_assert(sizeof(OrbisHmdReprojectionLayer) == 0xa8);
++static_assert(offsetof(OrbisHmdReprojectionLayer, uv) == 0x28);
++static_assert(offsetof(OrbisHmdReprojectionLayer, flags) == 0x78);
++
++s32 PS4_SYSV_ABI sceHmdReprojectionStartMultilayer(
++    const OrbisHmdReprojectionLayer* layers, u32 layer_count, const void* control,
++    const OrbisHmdReprojectionTrackerState* tracker_state, s64 flip_arg, s32 option);
+ s32 PS4_SYSV_ABI sceHmdReprojectionAddDisplayBuffer();
+ s32 PS4_SYSV_ABI sceHmdReprojectionClearUserEventEnd();
+ s32 PS4_SYSV_ABI sceHmdReprojectionClearUserEventStart();
+@@ -320,4 +339,4 @@ void OnVblank();
+ void RegisterDistortion(Core::Loader::SymbolsResolver* sym);
+ void RegisterReprojection(Core::Loader::SymbolsResolver* sym);
+ void RegisterLib(Core::Loader::SymbolsResolver* sym);
+-} // namespace Libraries::Hmd
+\ No newline at end of file
++} // namespace Libraries::Hmd
+diff --git a/shadps4-arm64-main/src/core/libraries/hmd/hmd_reprojection.cpp b/shadps4-arm64-main/src/core/libraries/hmd/hmd_reprojection.cpp
+index a73cf01..2d46936 100644
+--- a/shadps4-arm64-main/src/core/libraries/hmd/hmd_reprojection.cpp
++++ b/shadps4-arm64-main/src/core/libraries/hmd/hmd_reprojection.cpp
+@@ -2,7 +2,13 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include <chrono>
++#include <cmath>
++#include <atomic>
++#include <cstdlib>
+ #include <mutex>
++#ifdef _WIN32
++#include <windows.h>
++#endif
+ 
+ #include "common/logging/log.h"
+ #include "core/guest_cpu/guest_watchdog.h"
+@@ -75,9 +81,88 @@ void OnVblank() {
+     end_event.Trigger();
+ }
+ 
+-s32 PS4_SYSV_ABI sceHmdReprojectionStartMultilayer() {
+-    LOG_ERROR(Lib_Hmd, "(STUBBED) called");
+-    return ORBIS_OK;
++s32 PS4_SYSV_ABI sceHmdReprojectionStartMultilayer(
++    const OrbisHmdReprojectionLayer* layers, u32 layer_count, const void* control,
++    const OrbisHmdReprojectionTrackerState* tracker_state, s64 flip_arg, s32 option) {
++    const u64 arg0 = reinterpret_cast<u64>(layers);
++    const u64 arg1 = layer_count;
++    const u64 arg2 = reinterpret_cast<u64>(control);
++    const u64 arg3 = reinterpret_cast<u64>(tracker_state);
++    const u64 arg4 = flip_arg;
++    const u64 arg5 = option;
++    static std::atomic<u32> calls{};
++    const u32 call = calls.fetch_add(1);
++    static std::atomic<bool> traced_two_layers{};
++    const bool new_two_layers = layer_count == 2 && !traced_two_layers.exchange(true);
++    if ((call < 8 || call == 120 || call == 600 || new_two_layers) &&
++        std::getenv("SHADPS4_HMD_ABI_TRACE") != nullptr) {
++        LOG_INFO(Lib_Hmd,
++                 "HMD_ABI call={} caller={} args={:#x},{:#x},{:#x},{:#x},{:#x},{:#x}",
++                 call, __builtin_return_address(0), arg0, arg1, arg2, arg3, arg4, arg5);
++#ifdef _WIN32
++        // ReadProcessMemory safely rejects unmapped scalar/stale register values. The probe
++        // changes no guest memory and is bounded; it is not a compatibility implementation.
++        const auto dump = [call](u64 address, const char* kind, u32 index) {
++            std::array<u64, 32> data{};
++            SIZE_T read{};
++            if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address),
++                                   data.data(), sizeof(data), &read) || read != sizeof(data)) {
++                return data;
++            }
++            for (u32 offset = 0; offset < data.size(); offset += 4) {
++                LOG_INFO(Lib_Hmd, "HMD_ABI call={} {}[{}] ptr={:#x} +{:#x}: "
++                                  "{:016x} {:016x} {:016x} {:016x}",
++                         call, kind, index, address, offset * 8, data[offset], data[offset + 1],
++                         data[offset + 2], data[offset + 3]);
++            }
++            return data;
++        };
++        const std::array<u64, 6> args{arg0, arg1, arg2, arg3, arg4, arg5};
++        for (u32 index = 0; index < args.size(); ++index) {
++            const auto data = dump(args[index], "arg", index);
++            if (index == 2 && data[0] >= 0x100000000 && data[0] < 0x10000000000) {
++                dump(data[0], "control_pointer", 0);
++            }
++            if (index < 2) {
++                for (u32 word = 0; word < 8; ++word) {
++                    if (data[word] >= 0x100000000 && data[word] < 0x10000000000) {
++                        const auto nested = dump(data[word], "indirect", index * 8 + word);
++                        if (index == 0) {
++                            for (u32 texture = 0; texture < 2; ++texture) {
++                                if (nested[texture] >= 0x100000000 &&
++                                    nested[texture] < 0x10000000000) {
++                                    dump(nested[texture], "descriptor", word * 2 + texture);
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++#endif
++    }
++    if (layers == nullptr || tracker_state == nullptr || layer_count == 0) {
++        return ORBIS_HMD_ERROR_PARAMETER_NULL;
++    }
++    if (call < 4 || new_two_layers) {
++        LOG_INFO(Lib_Hmd, "Multilayer frame {} count={} layer0 flags={:#x} texture={}/{} "
++                          "uv scale={}/{} offset={}/{}", flip_arg, layer_count, layers[0].flags,
++                 layers[0].texture[0], layers[0].texture[1], layers[0].uv[0].scale_x,
++                 layers[0].uv[0].scale_y, layers[0].uv[0].offset_x, layers[0].uv[0].offset_y);
++    }
++    // First integration checkpoint: submit the primary rendered layer through the existing
++    // GPU/present queue. Additional layer composition is the next checkpoint, not silently
++    // claimed as supported by this adapter.
++    if (layer_count > 1 && new_two_layers) {
++        LOG_WARNING(Lib_Hmd, "Additional reprojection layer composition is not implemented yet");
++    }
++    OrbisHmdReprojectionParam param{};
++    param.texture[0] = layers[0].texture[0];
++    param.texture[1] = layers[0].texture[1];
++    param.sampler = layers[0].sampler;
++    param.uv[0] = layers[0].uv[0];
++    param.uv[1] = layers[0].uv[1];
++    return sceHmdReprojectionStart(&param, tracker_state, flip_arg, option);
+ }
+ 
+ s32 PS4_SYSV_ABI sceHmdReprojectionAddDisplayBuffer() {
+@@ -209,7 +294,16 @@ s32 PS4_SYSV_ABI sceHmdReprojectionStart(const OrbisHmdReprojectionParam* param,
+     Libraries::VideoOut::HmdFrame frame{};
+     std::memcpy(&frame.eye_textures[0], param->texture[0], sizeof(AmdGpu::Image));
+     std::memcpy(&frame.eye_textures[1], param->texture[1], sizeof(AmdGpu::Image));
+-    frame.fov = FovFromUv(param->uv[0]);
++    frame.packed_stereo = param->texture[0] == param->texture[1] &&
++                          param->uv[0].offset_x < 0.5f && param->uv[1].offset_x > 0.5f;
++    frame.flip_y = param->uv[0].scale_y < 0.0f;
++    auto left_uv = param->uv[0];
++    left_uv.scale_y = std::abs(left_uv.scale_y);
++    if (frame.packed_stereo) {
++        left_uv.scale_x *= 2.0f;
++        left_uv.offset_x *= 2.0f;
++    }
++    frame.fov = FovFromUv(left_uv);
+     frame.render_pose = {
+         .position{tracker_state->position[0], tracker_state->position[1],
+                   tracker_state->position[2]},
+diff --git a/shadps4-arm64-main/src/core/libraries/kernel/file_system.cpp b/shadps4-arm64-main/src/core/libraries/kernel/file_system.cpp
+index 95c4e93..205b566 100644
+--- a/shadps4-arm64-main/src/core/libraries/kernel/file_system.cpp
++++ b/shadps4-arm64-main/src/core/libraries/kernel/file_system.cpp
+@@ -2,12 +2,14 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include <map>
++#include <cstdlib>
+ #include <ranges>
+ #include <magic_enum/magic_enum.hpp>
+ 
+ #include "common/assert.h"
+ #include "common/error.h"
+ #include "common/logging/log.h"
++#include "common/path_util.h"
+ #include "common/scope_exit.h"
+ #include "common/singleton.h"
+ #include "core/file_sys/devices/console_device.h"
+@@ -131,6 +133,12 @@ s32 PS4_SYSV_ABI open(const char* raw_path, s32 flags, u16 mode) {
+     bool read_only = false;
+     file->m_guest_name = path;
+     file->m_host_name = mnt->GetHostPath(file->m_guest_name, &read_only);
++    // Optional Unity player diagnostics, kept in the portable user log directory rather
++    // than granting write access to the mounted game assets.
++    if (file->m_guest_name == "/app0/debug.log" && std::getenv("SHADPS4_UNITY_LOG") != nullptr) {
++        file->m_host_name = Common::FS::GetUserPath(Common::FS::PathType::LogDir) / "unity_debug.log";
++        read_only = false;
++    }
+     bool exists = fs::exists(file->m_host_name);
+     s32 e = 0;
+ 
+diff --git a/shadps4-arm64-main/src/core/libraries/videoout/driver.cpp b/shadps4-arm64-main/src/core/libraries/videoout/driver.cpp
+index f82e9dc..6378868 100644
+--- a/shadps4-arm64-main/src/core/libraries/videoout/driver.cpp
++++ b/shadps4-arm64-main/src/core/libraries/videoout/driver.cpp
+@@ -516,7 +516,8 @@ void VideoOutDriver::SubmitHmdFrameInternal(VideoOutPort* port, const HmdFrame&
+     u32 eye_width = 0;
+     u32 eye_height = 0;
+     const Vulkan::HmdFrames frames =
+-        presenter->PrepareHmdFrame(hmd_frame.eye_textures, frame_id, eye_width, eye_height);
++        presenter->PrepareHmdFrame(hmd_frame.eye_textures, frame_id, eye_width, eye_height,
++                                  hmd_frame.packed_stereo, hmd_frame.flip_y);
+     if (!frames) {
+         // Same as regular flips: retry once the current graphics task yields.
+         liverpool->EnqueueCommand([=, this] {
+diff --git a/shadps4-arm64-main/src/core/libraries/videoout/video_out.h b/shadps4-arm64-main/src/core/libraries/videoout/video_out.h
+index cf31621..32e4fc0 100644
+--- a/shadps4-arm64-main/src/core/libraries/videoout/video_out.h
++++ b/shadps4-arm64-main/src/core/libraries/videoout/video_out.h
+@@ -146,6 +146,8 @@ s32 PS4_SYSV_ABI sceVideoOutAdjustColor(s32 handle, const SceVideoOutColorSettin
+ /// One stereo frame handed to the headset by the HMD reprojection.
+ struct HmdFrame {
+     std::array<AmdGpu::Image, 2> eye_textures; ///< Guest texture descriptors, left then right.
++    bool packed_stereo{}; ///< Both eyes occupy the left/right halves of a shared texture.
++    bool flip_y{}; ///< Negative projection UV scale, as submitted by Unity PSVR.
+     Core::Vr::Fov fov;                         ///< Field of view the eyes were rendered with.
+     /// Head pose used for rendering: in tracker space as the title hands it in, in the host's
+     /// space once the frame is on its way to the display.
+diff --git a/shadps4-arm64-main/src/core/vr/openxr_host.cpp b/shadps4-arm64-main/src/core/vr/openxr_host.cpp
+index f26e4e2..6164ede 100644
+--- a/shadps4-arm64-main/src/core/vr/openxr_host.cpp
++++ b/shadps4-arm64-main/src/core/vr/openxr_host.cpp
+@@ -345,6 +345,7 @@ struct OpenXrHost::Impl {
+ 
+     // The headset's own controllers, which stand in for a gamepad where the PC has none.
+     bool use_controllers{true};
++    bool controller_dpad{};
+     int pad_hand{1};
+     XrVector3f pad_offset{};
+     XrActionSet action_set{XR_NULL_HANDLE};
+@@ -984,6 +985,14 @@ struct OpenXrHost::Impl {
+         const float right_trigger = pulled(act_r2);
+         const XrVector2f move = stick(act_move);
+         const XrVector2f finger = stick(act_finger);
++        // FGO VR menus consume digital directions (the desktop's arrow keys).
++        // Opt-in only: Astro Bot and other titles retain their analog movement mapping.
++        if (controller_dpad) {
++            add(move.x < -0.55f, Buttons::Left);
++            add(move.x > 0.55f, Buttons::Right);
++            add(move.y > 0.55f, Buttons::Up);
++            add(move.y < -0.55f, Buttons::Down);
++        }
+         if (!any_active) {
+             // Both lie somewhere, asleep.
+             ReleaseControllers("they are not in the player's hands");
+@@ -2382,6 +2391,10 @@ bool OpenXrHost::Connect() {
+     const char* script = std::getenv("SHADPS4_INPUT_SCRIPT");
+     impl->use_controllers =
+         EnvFlag("SHADPS4_XR_CONTROLLERS", script == nullptr || script[0] == '\0');
++    impl->controller_dpad = EnvFlag("SHADPS4_XR_DPAD", false);
++    if (impl->controller_dpad) {
++        LOG_INFO(Core_Vr, "Touch left stick also supplies digital menu directions");
++    }
+     impl->use_grips = impl->track_hands && EnvFlag("SHADPS4_XR_GRIPS", true);
+     if (const char* hand = std::getenv("SHADPS4_XR_PAD_HAND"); hand != nullptr) {
+         impl->pad_hand = hand[0] == 'l' || hand[0] == 'L' ? 0 : 1;
+diff --git a/shadps4-arm64-main/src/video_core/host_shaders/post_process.frag b/shadps4-arm64-main/src/video_core/host_shaders/post_process.frag
+index e3eee2c..56d1ef5 100644
+--- a/shadps4-arm64-main/src/video_core/host_shaders/post_process.frag
++++ b/shadps4-arm64-main/src/video_core/host_shaders/post_process.frag
+@@ -17,6 +17,8 @@ layout (push_constant) uniform settings {
+     // The target encodes what it is given for display by itself (an sRGB image): it has to be
+     // given linear light, or the picture would be encoded twice.
+     bool linear_out;
++    vec2 uv_offset;
++    vec2 uv_scale;
+ } pp;
+ 
+ const float cutoff = 0.0031308, a = 1.055, b = 0.055, d = 12.92;
+@@ -35,16 +37,17 @@ vec3 shown(vec2 at) {
+ }
+ 
+ void main() {
+-    vec4 color_linear = texture(texSampler, uv);
++    vec2 at = uv * pp.uv_scale + pp.uv_offset;
++    vec4 color_linear = texture(texSampler, at);
+     vec3 here = pp.hdr ? color_linear.rgb : gamma(color_linear.rgb);
+     if (pp.sharpen > 0.0) {
+         // Contrast adaptive sharpening: a pixel is pushed away from the four next to it, the
+         // more the less they differ already, and never beyond black or white.
+         vec2 texel = 1.0 / vec2(textureSize(texSampler, 0));
+-        vec3 above = shown(uv - vec2(0.0, texel.y));
+-        vec3 below = shown(uv + vec2(0.0, texel.y));
+-        vec3 left = shown(uv - vec2(texel.x, 0.0));
+-        vec3 right = shown(uv + vec2(texel.x, 0.0));
++        vec3 above = shown(at - vec2(0.0, texel.y));
++        vec3 below = shown(at + vec2(0.0, texel.y));
++        vec3 left = shown(at - vec2(texel.x, 0.0));
++        vec3 right = shown(at + vec2(texel.x, 0.0));
+         vec3 darkest = min(min(min(above, below), min(left, right)), here);
+         vec3 brightest = max(max(max(above, below), max(left, right)), here);
+         vec3 room = sqrt(clamp(min(darkest, 1.0 - brightest) / max(brightest, vec3(1e-5)),
+diff --git a/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.cpp b/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.cpp
+index d1190f8..a2823c8 100644
+--- a/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.cpp
++++ b/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.cpp
+@@ -269,6 +269,11 @@ void PostProcessingPass::Render(vk::CommandBuffer cmdbuf, std::span<const Region
+     cmdbuf.beginRendering(rendering_info);
+     for (size_t i = 0; i < regions.size(); ++i) {
+         const Region& region = regions[i];
++        auto region_settings = settings;
++        region_settings.uv_offset = region.uv_offset;
++        region_settings.uv_scale = region.uv_scale;
++        cmdbuf.pushConstants(*pipeline_layout, vk::ShaderStageFlagBits::eFragment, 0,
++                             sizeof(Settings), &region_settings);
+         cmdbuf.setViewport(0, vk::Viewport{
+                                   .x = static_cast<float>(region.area.offset.x),
+                                   .y = static_cast<float>(region.area.offset.y),
+diff --git a/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.h b/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.h
+index f61b489..667175c 100644
+--- a/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.h
++++ b/shadps4-arm64-main/src/video_core/renderer_vulkan/host_passes/pp_pass.h
+@@ -26,6 +26,8 @@ public:
+         float sharpen = 0.0f;
+         /// For an output image of an sRGB format, which does the encoding for display itself.
+         u32 linear_out = 0;
++        std::array<float, 2> uv_offset{0.0f, 0.0f};
++        std::array<float, 2> uv_scale{1.0f, 1.0f};
+     };
+ 
+     void Create(const Instance& instance, MasterSemaphore* master_semaphore,
+@@ -35,6 +37,8 @@ public:
+     struct Region {
+         vk::ImageView input;
+         vk::Rect2D area;
++        std::array<float, 2> uv_offset{0.0f, 0.0f};
++        std::array<float, 2> uv_scale{1.0f, 1.0f};
+     };
+ 
+     // Frame marker: a row of black and white blocks stamped along the top-left edge of a frame.
+diff --git a/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.cpp b/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.cpp
+index 35b4d65..0111ecd 100644
+--- a/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.cpp
++++ b/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.cpp
+@@ -846,7 +846,8 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+ }
+ 
+ HmdFrames Presenter::PrepareHmdFrame(std::span<const AmdGpu::Image, 2> eye_textures, u32 frame_id,
+-                                     u32& eye_width, u32& eye_height) {
++                                     u32& eye_width, u32& eye_height, bool packed_stereo,
++                                     bool flip_y) {
+     // The guest hands the eyes over as plain textures; they were rendered as color targets, so
+     // the cache already holds their contents.
+     std::array<VideoCore::TextureCache::ImageDesc, 2> descs;
+@@ -890,7 +891,7 @@ HmdFrames Presenter::PrepareHmdFrame(std::span<const AmdGpu::Image, 2> eye_textu
+     ++logged_frames;
+ 
+     const auto& left_info = texture_cache.GetImage(image_ids[0]).info;
+-    eye_width = left_info.size.width;
++    eye_width = packed_stereo ? left_info.size.width / 2 : left_info.size.width;
+     eye_height = left_info.size.height;
+ 
+     // With a VR host attached the frame goes into one of its buffers instead of the window. A
+@@ -958,6 +959,8 @@ HmdFrames Presenter::PrepareHmdFrame(std::span<const AmdGpu::Image, 2> eye_textu
+                     .offset{.x = static_cast<s32>(eye * half_width), .y = 0},
+                     .extent{.width = half_width, .height = target.height},
+                 },
++                .uv_offset{packed_stereo ? eye * 0.5f : 0.0f, flip_y ? 1.0f : 0.0f},
++                .uv_scale{packed_stereo ? 0.5f : 1.0f, flip_y ? -1.0f : 1.0f},
+             };
+         }
+         return regions;
+diff --git a/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.h b/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.h
+index a0f91e3..8e48574 100644
+--- a/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.h
++++ b/shadps4-arm64-main/src/video_core/renderer_vulkan/vk_presenter.h
+@@ -116,7 +116,8 @@ public:
+     /// Composes the two eye images of a headset frame side by side into a presentation frame
+     /// and stamps it with `frame_id` so the host can match it to a head pose.
+     HmdFrames PrepareHmdFrame(std::span<const AmdGpu::Image, 2> eye_textures, u32 frame_id,
+-                              u32& eye_width, u32& eye_height);
++                             u32& eye_width, u32& eye_height, bool packed_stereo = false,
++                             bool flip_y = false);
+ 
+     /// Hands a frame made by PrepareHmdFrame to the VR host. Returns false for a frame that is
+     /// not one of the host's, which has to be presented as usual.

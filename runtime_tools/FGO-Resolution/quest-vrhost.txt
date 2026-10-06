@@ -1,0 +1,1 @@
+fgo_render_scale=100

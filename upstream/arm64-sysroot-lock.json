@@ -1,0 +1,251 @@
+{
+  "suite": "Debian 13 trixie ARM64",
+  "packages": [
+    {
+      "package": "libc6",
+      "version": "2.41-12+deb13u4",
+      "url": "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.41-12+deb13u4_arm64.deb",
+      "sha256": "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc"
+    },
+    {
+      "package": "libc6-dev",
+      "version": "2.41-12+deb13u4",
+      "url": "https://deb.debian.org/debian/pool/main/g/glibc/libc6-dev_2.41-12+deb13u4_arm64.deb",
+      "sha256": "71e373cb5e9da975b02fb4af555929cb1977560e2dd8245de4eb8a7b03677a08"
+    },
+    {
+      "package": "linux-libc-dev",
+      "version": "6.12.107-1",
+      "url": "https://deb.debian.org/debian/pool/main/l/linux/linux-libc-dev_6.12.107-1_all.deb",
+      "sha256": "dc68dd53c7356598d005866da0d19d7bd33af2a62971aced624cdf04492902b4"
+    },
+    {
+      "package": "gcc-14-base",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14-base_14.2.0-19_arm64.deb",
+      "sha256": "34ee90679b018c0e64234747a4c4c0ae6b7f63541115037465a8627c2dfbc594"
+    },
+    {
+      "package": "libgcc-14-dev",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgcc-14-dev_14.2.0-19_arm64.deb",
+      "sha256": "64b8ebc7182a69aa9525df6eab5e7eb849b947e350d821549f8a8a3e9b19e5ba"
+    },
+    {
+      "package": "libstdc++-14-dev",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libstdc++-14-dev_14.2.0-19_arm64.deb",
+      "sha256": "8760122d044cd8eb8c69426311d6b5ce7bb8f0f76e9cda1944d153ae878138f8"
+    },
+    {
+      "package": "libstdc++6",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libstdc++6_14.2.0-19_arm64.deb",
+      "sha256": "6669b0c52a2e7c6af9adfdabce3ff6e286065cdfbc7b85280862b5f799daebee"
+    },
+    {
+      "package": "libgcc-s1",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgcc-s1_14.2.0-19_arm64.deb",
+      "sha256": "1108bc87879833d6d9a145f22a4a15cddb34e065b4b5f4b97bee586adbac2851"
+    },
+    {
+      "package": "libatomic1",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libatomic1_14.2.0-19_arm64.deb",
+      "sha256": "7ccff90234484bf21ae5ecb79d25b6a84b2f4038f65dd139085b2e3a937cd8dc"
+    },
+    {
+      "package": "libgomp1",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgomp1_14.2.0-19_arm64.deb",
+      "sha256": "43e84cb7971d8a4d8870cab6204e998ea4f23ee1339bb0ff556dd881bac82d25"
+    },
+    {
+      "package": "libitm1",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libitm1_14.2.0-19_arm64.deb",
+      "sha256": "d6f0255b498af876ab7bf4420672e43cbe58dcd577f0711131cbfbcbee283cdb"
+    },
+    {
+      "package": "libasan8",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libasan8_14.2.0-19_arm64.deb",
+      "sha256": "5621bd583a3390b45726a8eebe23601f7fad86a25193e5349976cbf17e2bc9ad"
+    },
+    {
+      "package": "liblsan0",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/liblsan0_14.2.0-19_arm64.deb",
+      "sha256": "488a54a5fe01a926ae16d73dc7ea9f530f1bf63fae73640f741695eec2541a38"
+    },
+    {
+      "package": "libtsan2",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libtsan2_14.2.0-19_arm64.deb",
+      "sha256": "c767c05f3dade13b5780478366029f2ff32e44bea852c6a4d7a1f93f1363d3e3"
+    },
+    {
+      "package": "libubsan1",
+      "version": "14.2.0-19",
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/libubsan1_14.2.0-19_arm64.deb",
+      "sha256": "b5539003465ea1e60f66b9e3a1019da182e826c82d480944f3656b12351c74c8"
+    },
+    {
+      "package": "libvulkan-dev",
+      "version": "1.4.309.0-1",
+      "url": "https://deb.debian.org/debian/pool/main/v/vulkan-loader/libvulkan-dev_1.4.309.0-1_arm64.deb",
+      "sha256": "3244f0422d3c5cf14f5d13bc48a0cae7786d94ea0ceff22414c094388666e70d"
+    },
+    {
+      "package": "libvulkan1",
+      "version": "1.4.309.0-1",
+      "url": "https://deb.debian.org/debian/pool/main/v/vulkan-loader/libvulkan1_1.4.309.0-1_arm64.deb",
+      "sha256": "f5f576d8b9e5703702a9f3254c8c5d130bef17da9db4aecd46ba86cec7a08930"
+    },
+    {
+      "package": "libx11-dev",
+      "version": "2:1.8.12-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libx11/libx11-dev_1.8.12-1_arm64.deb",
+      "sha256": "147ce590c806ed92d26fa8eaf74f2021043afcb2a828bfc72c4bca2d15df4131"
+    },
+    {
+      "package": "libx11-6",
+      "version": "2:1.8.12-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libx11/libx11-6_1.8.12-1_arm64.deb",
+      "sha256": "646f2d3f2165c8eebceb7f4aaca31e97a818bb11a045964833a9f764b738bac2"
+    },
+    {
+      "package": "libxext-dev",
+      "version": "2:1.3.4-1+b3",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxext/libxext-dev_1.3.4-1+b3_arm64.deb",
+      "sha256": "8e4334abc63d18cb9074aa4571c8fa4aa43fced729fa9c2137179864bb4dd0f9"
+    },
+    {
+      "package": "libxext6",
+      "version": "2:1.3.4-1+b3",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxext/libxext6_1.3.4-1+b3_arm64.deb",
+      "sha256": "27cf208c6d2924b22ed3b9ceff304b992e1f07ef7b0ef00239585595581dac99"
+    },
+    {
+      "package": "libxcb1-dev",
+      "version": "1.17.0-2+b1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxcb/libxcb1-dev_1.17.0-2+b1_arm64.deb",
+      "sha256": "0a9a765046310884153ccf124c9dde25766274d6ce3edb1cb908a156d9613488"
+    },
+    {
+      "package": "libxcb1",
+      "version": "1.17.0-2+b1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxcb/libxcb1_1.17.0-2+b1_arm64.deb",
+      "sha256": "d0178198e80ed4cacdececabe2c112ec88c7a9258cc11a55b8e267ab14a90d82"
+    },
+    {
+      "package": "libxau-dev",
+      "version": "1:1.0.11-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxau/libxau-dev_1.0.11-1_arm64.deb",
+      "sha256": "23888468fec6be4391ea25e2029dfa977582e3923c3d7c9e4296ca622a78995e"
+    },
+    {
+      "package": "libxau6",
+      "version": "1:1.0.11-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxau/libxau6_1.0.11-1_arm64.deb",
+      "sha256": "ac1061728670f4626adaa1288953a0e6fb801c9cae72ee1c3231e63e2609d23a"
+    },
+    {
+      "package": "libxdmcp-dev",
+      "version": "1:1.1.5-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxdmcp/libxdmcp-dev_1.1.5-1_arm64.deb",
+      "sha256": "77962fd08ba0f4aca39060b9e19a4cfb726f678a45c9ba6cf33079a006bcad1e"
+    },
+    {
+      "package": "libxdmcp6",
+      "version": "1:1.1.5-1",
+      "url": "https://deb.debian.org/debian/pool/main/libx/libxdmcp/libxdmcp6_1.1.5-1_arm64.deb",
+      "sha256": "e10bbb0802181992ecf091e9425171850eee16068729c109214ba4924f81fb52"
+    },
+    {
+      "package": "x11proto-dev",
+      "version": "2024.1-1",
+      "url": "https://deb.debian.org/debian/pool/main/x/xorgproto/x11proto-dev_2024.1-1_all.deb",
+      "sha256": "6a6764500eb8171d3cd6d793c09902974f8ea87bd20c68d9eac5f1eeaf3fc407"
+    },
+    {
+      "package": "xorg-sgml-doctools",
+      "version": "1:1.11-1.1",
+      "url": "https://deb.debian.org/debian/pool/main/x/xorg-sgml-doctools/xorg-sgml-doctools_1.11-1.1_all.deb",
+      "sha256": "168345058319094e475a87ace66f5fb6ae802109650ea8434d672117982b5d0a"
+    },
+    {
+      "package": "xtrans-dev",
+      "version": "1.4.0-1",
+      "url": "https://deb.debian.org/debian/pool/main/x/xtrans/xtrans-dev_1.4.0-1_all.deb",
+      "sha256": "9ce1af9464faee0c679348dd11cdf63934c12e734a64e0903692b0cb5af38e06"
+    },
+    {
+      "package": "libcap-dev",
+      "version": "1:2.75-10+deb13u1+b3",
+      "url": "https://deb.debian.org/debian/pool/main/libc/libcap2/libcap-dev_2.75-10+deb13u1+b3_arm64.deb",
+      "sha256": "e3184756963ee724e0f1f06a9be05e9a5e5caf7e2255b61a224ccc9ecec19af8"
+    },
+    {
+      "package": "libcap2",
+      "version": "1:2.75-10+deb13u1+b3",
+      "url": "https://deb.debian.org/debian/pool/main/libc/libcap2/libcap2_2.75-10+deb13u1+b3_arm64.deb",
+      "sha256": "863aa5b9cdf6f80010b48982d4639126b09a89eeef2c0c5c7be226297c811581"
+    },
+    {
+      "package": "libdrm-dev",
+      "version": "2.4.124-2",
+      "url": "https://deb.debian.org/debian/pool/main/libd/libdrm/libdrm-dev_2.4.124-2_arm64.deb",
+      "sha256": "7871c74757d8d000c900dbbdb0e81a2665893fcab1704b6019953529bb4c0f4a"
+    },
+    {
+      "package": "libdrm2",
+      "version": "2.4.124-2",
+      "url": "https://deb.debian.org/debian/pool/main/libd/libdrm/libdrm2_2.4.124-2_arm64.deb",
+      "sha256": "b535506630bb6a9a616bc07caf3b29915f980d8c3437852fb96ea64fb1a8a3f8"
+    },
+    {
+      "package": "libdrm-common",
+      "version": "2.4.124-2",
+      "url": "https://deb.debian.org/debian/pool/main/libd/libdrm/libdrm-common_2.4.124-2_all.deb",
+      "sha256": "9a8a6c65c165e9964f106fb4ac710959b5d33e0790227e3ab6b27c4742d1254a"
+    },
+    {
+      "package": "libexpat1-dev",
+      "version": "2.8.3-1~deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/e/expat/libexpat1-dev_2.8.3-1~deb13u1_arm64.deb",
+      "sha256": "a9b760a2291295ab70d45123926d800f5333bbdf7da0f132fb72268a377f8c6d"
+    },
+    {
+      "package": "libexpat1",
+      "version": "2.8.3-1~deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/e/expat/libexpat1_2.8.3-1~deb13u1_arm64.deb",
+      "sha256": "c3248c4beb721c8290e6e34527ae56b1fc965aa6a14982ca602df4458ef0854e"
+    },
+    {
+      "package": "libudev-dev",
+      "version": "257.13-1~deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/s/systemd/libudev-dev_257.13-1~deb13u1_arm64.deb",
+      "sha256": "4f63c79e9eec01eadf4a450d8ef12e327b82cf49f5106abc9ac39a3353f04314"
+    },
+    {
+      "package": "libudev1",
+      "version": "257.13-1~deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/s/systemd/libudev1_257.13-1~deb13u1_arm64.deb",
+      "sha256": "459b1c9c17cc3c586e90d13d2a991715d498c6eed6c046cabf321021167bc380"
+    },
+    {
+      "package": "uuid-dev",
+      "version": "2.41.5-0+deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/u/util-linux/uuid-dev_2.41.5-0+deb13u1_arm64.deb",
+      "sha256": "eca5896d42fcc5daaf3f875a11a8766ef6673191d236d233b92d33f6b5fc0341"
+    },
+    {
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "url": "https://deb.debian.org/debian/pool/main/u/util-linux/libuuid1_2.41.5-0+deb13u1_arm64.deb",
+      "sha256": "448ad6b190184dbff24508ef2eda88bd737a5ffc0f9750eb779fcf9885292bea"
+    }
+  ]
+}

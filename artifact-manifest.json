@@ -15,8 +15,8 @@
   "artifacts": [
     {
       "name": "FGO-VR-0.2.0-PCVR-Windows.zip",
-      "bytes": 68461030,
-      "sha256": "109e6f561d0a5170694f28f88d5ea2a97df514518df1a8abdba80e45974fb0c1"
+      "bytes": 68461091,
+      "sha256": "3aa9d2aaa7de198f48cfcba50e016d79c9916df597010373b5e472256f26c521"
     },
     {
       "name": "FGO-VR-0.2.0-Quest3.apk",

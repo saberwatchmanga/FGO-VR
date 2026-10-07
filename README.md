@@ -105,6 +105,6 @@ Complete platform patches are in `patches`; modified files are in `source_snapsh
 
 Source notices are retained under GPL-2.0-or-later and the applicable third-party licenses. See [LICENSE](LICENSE), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), and the upstream notices. This is an unofficial compatibility project; the original game and characters belong to their respective rights holders.
 
-## Future support information
+## Support
 
-Reserved link: [Ko-fi / terry2418](https://ko-fi.com/terry2418). PayPal receiving is currently unavailable, so this preview does not promise that payment works. The maintainer will update support information when receiving becomes available.
+If this project is useful to you, you can support its continued development on [Ko-fi / terry2418](https://ko-fi.com/terry2418). Thank you for your support.

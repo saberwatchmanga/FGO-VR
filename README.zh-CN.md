@@ -74,6 +74,6 @@
 
 项目按源码文件的GPL-2.0-or-later及各第三方许可证保留声明；见 [LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 和 `upstream` 中的原始说明。
 
-## 后续支持信息
+## 支持项目
 
-预留地址：[Ko-fi / terry2418](https://ko-fi.com/terry2418)。PayPal目前暂时无法收款，本预览不承诺支付可用；收款恢复后再按维护者安排添加公开支持入口。
+如果这个项目对你有帮助，欢迎通过 [Ko-fi / terry2418](https://ko-fi.com/terry2418) 支持后续开发。感谢你的支持。

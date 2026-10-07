@@ -20,6 +20,6 @@ The October 7 PC 1.50× VDXR run passed the specific story transition that previ
 ## Before any public release
 
 Confirm that the video is published and its URL is available. Recheck the README version and support status, artifact hashes, and known issues, then verify that the repository is still private before making the repository or Release public. Uploading files does not make them public.
-## Future support information
+## Support information
 
-Reserved link: [Ko-fi / terry2418](https://ko-fi.com/terry2418). PayPal receiving is currently unavailable. Do not promise payment availability; update the public support information when receiving becomes available.
+The maintainer confirmed that receiving is available again on October 7. Use [Ko-fi / terry2418](https://ko-fi.com/terry2418) as the support link in the release video and its description.

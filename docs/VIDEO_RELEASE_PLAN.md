@@ -1,18 +1,25 @@
-# 私有预览与发布视频计划
+# Private Preview and Release Video Plan
 
-当前：仓库PRIVATE、Release DRAFT。条件：兼容演示和后续游玩素材合成的发布视频已经上线并取得URL后，才将仓库/Release公开。没有日期或定时公开任务；视频URL目前待补充。
+Status: the repository is PRIVATE and the Release is a DRAFT. The planned video has not been published. There is no publication date, scheduled release, or video URL. The repository and Release remain private until the published video URL is available.
 
-建议成片内容：
+## Proposed video content
 
-1. 展示原PSVR1 FGO VR在PCVDXR和Quest3本地运行的结果，并标明AstroQuest/shadPS4基础。
-2. PC演示双眼、转头、Touch基本操作和150档画质，展示测试PC配置。
-3. Quest本地演示100/110/125对比，明确110仍锯齿、125卡顿，不用PC串流画面代替Quest本地效果。
-4. 补充后续实际剧情/游玩录制；这部分素材目前未提供，先保留待录清单。
-5. 演示外部分辨率开关、默认关闭和原版回退，再介绍下载与自行提供游戏数据的安装路径。
-6. 给出已知限制、上游贡献链接以及后续改进方向。
+1. Show the original PSVR1 FGO VR running through PC VDXR and locally on Quest 3, with AstroQuest and shadPS4 attribution.
+2. On PC, show both-eye output, head rotation, basic Touch controls, the 150% image, and the test PC configuration. Start the standard PCVR build with Launch-PCVR.cmd.
+3. On Quest, compare 100%, 110%, and 125%. State that 110% still shows aliasing and 125% had noticeable stutter. Do not use PC-streamed footage as a substitute for local Quest output.
+4. Add later gameplay footage when it has been recorded. That footage has not been supplied yet.
+5. Show Resolution-Settings.cmd for external render-scale settings and the 100% default-off state. Show Launch-PCVR-Original.cmd for the original-resolution fallback, and explain how users provide and install their own game data.
+6. Explain known limitations and future work, and link to the upstream projects: AstroQuest (https://github.com/bigmak94/AstroQuest) and shadPS4 (https://github.com/shadps4-emu/shadPS4).
 
-待录证据：头显真实双眼/追踪、同一场景各档对比、Quest性能统计、较长游戏段落、正常退出/重启。最近PC150退出有0xC0000005，发布视频中不宣称已解决或长期稳定。
+## Footage still to record
 
-支持信息：ko-fi.com/terry2418。PayPal暂不能收款，不承诺支付可用；恢复后再添加正式公开入口。
+Capture real headset output and tracking, a consistent scene at each scale, Quest performance measurements, a longer gameplay segment, and a normal exit and restart.
 
-公开操作前：核对视频确已发布、README版本/支持状态、文件哈希和已知问题，确认仓库仍private；随后按用户条件完成公开。上传结束不触发公开。
+The October 7 PC 1.50× VDXR run passed the specific story transition that previously crashed. Its matching 01.01 session lasted about 12 minutes 24 seconds and exited with code 0. The 1.25× run passed startup only. These results do not establish full-story completion, every transition, a measured frame rate, long-term stability, or precise Move pointing. The video must keep those limits clear.
+
+## Before any public release
+
+Confirm that the video is published and its URL is available. Recheck the README version and support status, artifact hashes, and known issues, then verify that the repository is still private before making the repository or Release public. Uploading files does not make them public.
+## Future support information
+
+Reserved link: [Ko-fi / terry2418](https://ko-fi.com/terry2418). PayPal receiving is currently unavailable. Do not promise payment availability; update the public support information when receiving becomes available.

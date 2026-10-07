@@ -38,7 +38,7 @@ def merge_quest(existing,scale):
 
 def push_quest(settings):
     validate(settings)
-    if not ADB.is_file(): raise RuntimeError('项目内 ADB 不存在。')
+    if not ADB.is_file(): raise RuntimeError('Bundled ADB was not found.')
     def adb(*args,check=True):
         result = subprocess.run([str(ADB),*args],capture_output=True,text=True,
                                 encoding='utf-8',errors='replace',timeout=30)
@@ -46,11 +46,11 @@ def push_quest(settings):
         return result
     devices = [line.split()[0] for line in adb('devices').stdout.splitlines()[1:]
                if len(line.split())>=2 and line.split()[1]=='device']
-    if len(devices)!=1: raise RuntimeError('请通过 USB 连接一台 Quest 并允许 USB 调试。')
+    if len(devices)!=1: raise RuntimeError('Connect one Quest by USB and allow USB debugging.')
     package = adb('-s',devices[0],'shell','dumpsys','package','com.fgovr.quest').stdout
     version = re.search(r'versionCode=(\d+)',package)
     if not version or int(version.group(1))<2:
-        raise RuntimeError('请先安装 FGO VR Quest 3 的 0.2.0 或后续版本。')
+        raise RuntimeError('Install FGO VR Quest 3 version 0.2.0 or later first.')
     has_file = adb('-s',devices[0],'shell','test','-f',REMOTE,check=False).returncode==0
     existing = adb('-s',devices[0],'shell','cat',REMOTE).stdout if has_file else ''
     evidence = ROOT/'evidence'/('quest_settings_'+datetime.now().strftime('%Y%m%d_%H%M%S'))
@@ -61,48 +61,48 @@ def push_quest(settings):
     adb('-s',devices[0],'shell','mkdir','-p',REMOTE.rsplit('/',1)[0])
     result = adb('-s',devices[0],'push',str(merged),REMOTE)
     (evidence/'push.txt').write_text(result.stdout+result.stderr,encoding='utf-8')
-    return '已推送 Quest 设置；关闭并重新打开游戏后生效。'
+    return 'Quest settings pushed. Close and restart the game to apply them.'
 
 def gui():
     import tkinter as tk
     from tkinter import ttk,messagebox
     window = tk.Tk()
-    window.title('FGO VR 分辨率设置')
+    window.title('FGO VR Resolution Settings')
     window.geometry('590x305')
     window.resizable(False,False)
     panel = ttk.Frame(window,padding=18)
     panel.pack(fill='both',expand=True)
     initial = load()
-    labels = {100:'关闭：原版分辨率',110:'1.10 倍：约增加 21% 像素',
-              125:'1.25 倍：约增加 56% 像素',150:'1.50 倍：约增加 125% 像素（PC 测试档）'}
+    labels = {100:'OFF: original resolution',110:'1.10x (about 21% more pixels)',
+              125:'1.25x (about 56% more pixels)',150:'1.50x (about 125% more pixels; PC only)'}
     pc = tk.StringVar(value=labels.get(initial['pc_scale'],labels[100]))
     quest = tk.StringVar(value=labels.get(initial['quest_scale'],labels[100]))
-    for row,title,variable,values in [(0,'PC / VDXR',pc,PC),(1,'Quest 3 本地',quest,QUEST)]:
+    for row,title,variable,values in [(0,'PC / VDXR',pc,PC),(1,'Quest 3 standalone',quest,QUEST)]:
         ttk.Label(panel,text=title).grid(row=row,column=0,padx=(0,12),pady=8,sticky='w')
         ttk.Combobox(panel,textvariable=variable,values=[labels[x] for x in values],
                      state='readonly',width=43).grid(row=row,column=1,sticky='w')
-    ttk.Label(panel,text='默认关闭。建议先试 1.10 倍；分辨率越高，GPU 和内存负载越大。\n'
-                        'PC：保存后重新启动游戏。Quest：安装新版、推送设置后重启游戏。\n'
-                        '关闭后恢复原分辨率。此工具不会自动启动或关闭游戏。',
+    ttk.Label(panel,text='Default: OFF. Higher resolution uses more GPU power and memory.\n'
+                        'PC: save and restart. Quest: push settings over USB, then restart.\n'
+                        'OFF restores original resolution. This tool does not start or stop games.',
               wraplength=545).grid(row=2,column=0,columnspan=2,pady=12,sticky='w')
-    status = tk.StringVar(value='设置未更改。')
+    status = tk.StringVar(value='Settings unchanged.')
     def selected():
         inverse = {v:k for k,v in labels.items()}
         return {'schema':1,'pc_scale':inverse[pc.get()],'quest_scale':inverse[quest.get()]}
     def store():
         try:
             save(selected())
-            status.set('已保存；Quest 本地配置也已生成，连接 USB 后可推送。')
-        except Exception as error: messagebox.showerror('保存失败',str(error))
+            status.set('Saved. Connect by USB to push the Quest settings.')
+        except Exception as error: messagebox.showerror('Save failed',str(error))
     def push():
         try:
             save(selected())
             status.set(push_quest(selected()))
-        except Exception as error: messagebox.showerror('推送未完成',str(error))
+        except Exception as error: messagebox.showerror('Push failed',str(error))
     buttons = ttk.Frame(panel)
     buttons.grid(row=3,column=0,columnspan=2,sticky='w')
-    ttk.Button(buttons,text='保存设置',command=store).pack(side='left',padx=(0,12))
-    ttk.Button(buttons,text='推送 Quest 设置（USB）',command=push).pack(side='left')
+    ttk.Button(buttons,text='Save settings',command=store).pack(side='left',padx=(0,12))
+    ttk.Button(buttons,text='Push Quest settings (USB)',command=push).pack(side='left')
     ttk.Label(panel,textvariable=status,wraplength=545).grid(row=4,column=0,columnspan=2,pady=14,sticky='w')
     window.mainloop()
 

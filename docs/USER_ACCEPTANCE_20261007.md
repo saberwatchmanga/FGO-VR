@@ -1,7 +1,9 @@
-# 用户验收：PC1.5倍转场修复
+# User Acceptance: PC 1.50× Transition Fix
 
-2026-10-07（东八区），用户在同一1.5倍修复入口、VDXR和原存档复测后回复：
+On October 7, 2026 (China Standard Time, UTC+8), the user retested through the 1.50× repair launcher with VDXR and the original save.
 
-> 1.5倍测试通过了，更新github吧
+> English translation of the user message: “The 1.5× test passed. Please update GitHub.”
 
-本轮请求的是先前闪退剧情转场的复测，据此记录该1.5倍回归通过。真实运行约12分24秒，正常退出0，exe为本次0.2.1已验收核心。1.25倍仅独立启动通过；完整剧情、其他转场、长期性能及Quest此次修复均未扩大验收范围。
+This confirms the requested regression test for the previously crashing story transition. The matching real session lasted about 12 minutes 24 seconds, exited normally with code 0, and used the accepted 0.2.1 core with SHA-256 563be6008f73855c3b4425c93bca104692999e97f0fb16cf956c5d3aa40123c1.
+
+The 1.25× run passed startup only. This acceptance does not cover the full story, other transitions, long-term performance, measured frame rate, precise Move pointing, or the Quest repair.

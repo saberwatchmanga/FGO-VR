@@ -1,24 +1,20 @@
-# Quest 3 本地版安装
+# Install the Quest 3 Local Version
 
-先开启开发者模式，通过USB连接并在头显中允许USB调试；只连接一台设备。使用Windows包内的ADB或自己安装的官方platform-tools。
+Enable Developer Mode, connect the headset by USB, and allow USB debugging in the headset. Connect only one device.
 
-```powershell
-adb devices
-adb install -r FGO-VR-0.2.0-Quest3.apk
-adb shell mkdir -p /data/local/tmp/fgovr/games
-adb push CUSA09078 /data/local/tmp/fgovr/games/
-adb push CUSA09078-UPDATE /data/local/tmp/fgovr/games/
-adb shell chmod -R a+rX /data/local/tmp/fgovr/games
-adb shell am start -n com.fgovr.quest/.MainActivity
-```
+    adb devices
+    adb install -r FGO-VR-0.2.0-Quest3.apk
+    adb shell mkdir -p /data/local/tmp/fgovr/games
+    adb push CUSA09078 /data/local/tmp/fgovr/games/
+    adb push CUSA09078-UPDATE /data/local/tmp/fgovr/games/
+    adb shell chmod -R a+rX /data/local/tmp/fgovr/games
+    adb shell am start -n com.fgovr.quest/.MainActivity
 
-游戏目录需包含自己的本体数据，更新不是独立游戏。APK没有游戏资产。已有同签名版本用 `install -r` 升级；不要为升级而卸载清空应用数据。自己构建的不同签名APK不能直接覆盖发布APK。
+Use your own game data in the game folders. The update folder is not a standalone game. The APK does not include game assets. Use install -r to update an existing build signed with the same key; do not uninstall the app just to update it, since that clears app data. An APK you build with a different signing key cannot directly replace the release APK.
 
-调整分辨率：打开Windows包内的设置工具、选Quest110并点击USB推送，然后关闭并重新打开应用。也可自行编辑外部配置文件：
+To change render scale, open Resolution-Settings.cmd in the Windows package, choose Quest 110, and select **Push Quest settings (USB)**. Close and reopen the app for the change to take effect. You can also edit the external configuration file yourself:
 
-```text
-/sdcard/Android/data/com.fgovr.quest/files/vrhost.txt
-fgo_render_scale=110
-```
+    /sdcard/Android/data/com.fgovr.quest/files/vrhost.txt
+    fgo_render_scale=110
 
-100关闭，110推荐先试，125用户报告明显卡顿。保留已有其他设置，只更改这一行。推送工具会备份原配置，不会自动关闭游戏。
+At 100, scaling is off. 110 is the suggested first setting. The user reported noticeable stutter at 125. Preserve other settings and change only the fgo_render_scale line. The push tool backs up the existing configuration and does not close the game automatically.

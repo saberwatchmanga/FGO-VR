@@ -1,24 +1,28 @@
-# 固定源码与构建输入
+# Fixed Source and Build Inputs
 
-上游AstroQuest固定commit：`9f42c44d4e838e3a0df67913e350c4f098110862`。
+The upstream AstroQuest source is pinned to commit 9f42c44d4e838e3a0df67913e350c4f098110862.
 
-```powershell
-python tools/prepare_source.py pc C:\work\fgo-pc-source
-python tools/prepare_source.py quest C:\work\fgo-quest-source
-```
+    python tools/prepare_source.py pc C:\work\fgo-pc-source
+    python tools/prepare_source.py quest C:\work\fgo-quest-source
 
-每个平台只应用自己的complete.patch；core.patch为审阅增量，不再叠加。保留源码快照和子模块清单，不提交嵌套Git目录。
+Apply only the matching platform complete.patch. core.patch is a review delta and must not be stacked on top. Keep the source snapshots and submodule manifest; do not submit nested Git repositories. Text snapshots may differ only because of Windows line endings.
 
-开发构建记录：Windows LLVM21.1.8、VS2022 SDK，VS2026提供CMake/Ninja；Java17；Android NDKr27d、SDK36、build-tools36；固定Debian ARM64 sysroot；FEX `f2b679f6028ce1c38875233aecfcf5d3f8ebecec`，FFmpeg `94dde08c8a9e4271a93a2a7e4159e9fb05d30c0a`。
+## Recorded toolchain
 
-`upstream/arm64-sysroot-lock.json` 记录本次实际使用的Debian包版本、下载地址和SHA256；重建时按此锁定清单取得包，不以当前滚动仓库最新包替代。现有prepare_arm64_sysroot.py是构建流程参考，并非完整锁定依赖的安装器。FEX另需固定上面的提交，按上游runtime流程及 `patches/build-support/fex-fexcore-only.patch` 准备；prepare_source.py只准备AstroQuest及其Git子模块。
+- Windows: LLVM 21.1.8 and the Visual Studio 2022 SDK; Visual Studio 2026 supplies CMake and Ninja.
+- Quest: Java 17, Android NDK r27d, SDK 36, and build-tools 36.
+- Quest core: the pinned Debian ARM64 sysroot.
+- FEX: commit f2b679f6028ce1c38875233aecfcf5d3f8ebecec.
+- FFmpeg: commit 94dde08c8a9e4271a93a2a7e4159e9fb05d30c0a.
 
-Windows原版回退核心对应 `patches/baseline/fgo-pcvr.patch`；可选分辨率核心对应 `patches/fgo-resolution-pc-complete.patch`。baseline目录中的loading补丁只保留早期桌面实现来源，不与PCVR或complete补丁叠加。
+upstream/arm64-sysroot-lock.json records the Debian package versions, download URLs, and SHA-256 hashes used for this build. Rebuilds should use that lock file rather than current rolling-repository packages. prepare_arm64_sysroot.py documents part of the build flow; it is not a complete installer for all locked dependencies. FEX also requires the pinned commit and its upstream runtime build flow, plus patches/build-support/fex-fexcore-only.patch. prepare_source.py only prepares AstroQuest and its Git submodules.
 
-`build_reference` 保存必要构建脚本和当前流程。PC编译开启OpenXR。Quest宿主为Android OpenXR/EGL，核心为ARM64/glibc，使用FEX执行原x86游戏，Turnip处理Vulkan；APK构建复用维护者提供的AstroQuest0.13运行库，并打包自行构建的核心。
+The Windows original-resolution fallback core corresponds to patches/baseline/fgo-pcvr.patch. The optional resolution core corresponds to patches/fgo-resolution-pc-complete.patch. The baseline directory contains a loading patch retained as an earlier desktop implementation reference; do not combine it with the PCVR or complete patch.
 
-脚本中的VS/Java路径是开发机路径快照，工具目录需按自己的环境调整。Quest还需上游AstroQuest APK运行库、LLVM、sysroot以及PC字体嵌入工具。脚本不含游戏数据、发布签名私钥或GitHub凭据；自行签名的APK不能直接覆盖不同签名的已安装版本。
+build_reference contains the required build scripts and a snapshot of the current process. The PC build enables OpenXR. The Quest host uses Android OpenXR/EGL; its core is ARM64/glibc, runs the original x86 game through FEX, and uses Turnip for Vulkan. The APK build reuses the maintainer-provided AstroQuest 0.13 runtime library and packages the locally built core.
 
-完整历史构建/设备日志不上传；公开可用的摘要在TESTING.md，文件校验在SHA256SUMS和artifact-manifest.json。
+Script paths for Visual Studio and Java are snapshots from the development machine and may need adjustment. Quest also needs the upstream AstroQuest APK runtime, LLVM, the sysroot, and the PC font-embedding tool. Scripts contain no game data, release-signing private key, or GitHub credentials. An APK signed with a different key cannot directly replace an installed APK with another signature.
 
-PC0.2.1 complete.patch已包含图形池/Backing预算修复及可选Windows故障诊断；EmulatorSettings进程字段不进入保存配置。portable launcher将诊断与修复开关路由到同一已验收可选核心。Quest complete.patch仍为0.2.0，平台补丁不可交叉套用。
+Full historical build and device logs are not included. Public verification is summarized in TESTING.md; file checks are recorded in SHA256SUMS and artifact-manifest.json.
+
+The full PC 0.2.1 patch is based on the pinned source commit and includes the graphics-pool/Backing-budget repair and optional Windows failure diagnostics. The opt-in diagnostics match the accepted executable. EmulatorSettings process fields are not written to the saved configuration. Launch-PCVR.cmd selects the original core at 100/OFF and the accepted scaled core when a higher profile is enabled; Launch-PCVR-Original.cmd selects the original-resolution fallback; Resolution-Settings.cmd opens the profile tool. The Quest complete.patch remains at 0.2.0; do not apply platform patches across targets.

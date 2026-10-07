@@ -1,19 +1,21 @@
-# 验证摘要
+# Test Summary
 
-## PCVR 0.2.1（2026-10-07）
+## PCVR 0.2.1 (2026-10-07)
 
-用户在此前请求的1.5倍VDXR原闪退剧情转场复测后确认“1.5倍测试通过了，更新github吧”。匹配已验收的修复核心SHA256为563be6008f73855c3b4425c93bca104692999e97f0fb16cf956c5d3aa40123c1。该01.01会话约12分24秒，正常退出0，配套总内存预算生效，无DirectMemory分配失败或未处理异常。
+On October 7, the user reran the original crashing story transition at 1.50× in the matching PCVDXR 01.01 setup. The targeted transition passed. The matching session lasted about 12 minutes 24 seconds and exited with code 0. The accepted core SHA-256 is 563be6008f73855c3b4425c93bca104692999e97f0fb16cf956c5d3aa40123c1. The paired memory budget was active, with no DirectMemory allocation failure or unhandled exception.
 
-原因是游戏固定图形池没有随高倍率增长，36MiB申请失败；原OOM字符串漏%，随后产生二次访问异常。修复同步增长图形池与本进程物理Backing/Direct额度，保留原真实错误处理。仅核实标题与版本/指令匹配时应用，100关闭档不修改游戏内分辨率。
+The game graphics pool did not grow with the higher render scale, so a 36 MiB allocation failed. A malformed original out-of-memory message then caused a second crash. The fix grows the graphics pool and the matching per-process physical Backing/Direct budgets, and corrects the error message. It applies only when the game title, version, and instruction match. At 100%, the setting is off and the original game resolution is preserved.
 
-125/150各45秒独立桌面启动、100档30秒回退通过；实际读取原游戏LLE堆上下文确认容量/非零句柄，CPU加载正常，受控退出0。保存extra_dmem仍0，原设置哈希不变。容量补丁机器码21例、寄存器/重定位/对齐与修正格式化执行检查通过。HLE mspace合成测试只验证独立HLE实现，不能替代原游戏LLE堆或头显验收。
+Standalone desktop startup checks passed for 1.25× and 1.50× (45 seconds each); the 100% fallback ran for 30 seconds. The game LLE heap context showed the expected capacity and a nonzero handle, CPU loading completed, and controlled exits returned code 0. The saved extra_dmem_in_mbytes value remained 0 and the original settings hash did not change. The patch also passed 21 machine-code cases and checks for registers, relocations, alignment, and corrected formatting. The synthetic HLE mspace test covers only that separate HLE implementation; it does not replace validation of the original game LLE heap or headset play.
 
-1.25倍本轮只验证启动；本次1.5倍验收也不表示全剧情、全部转场、长期稳定帧率、精准空间指向或全部训练玩法通过。
+## Acceptance limits
 
-## 已有PC/Quest验证
+The 1.50× result covers the requested original-crash transition only. The 1.25× run passed startup only. Full-story completion, other transitions, frame rate, long-term stability, precise Move pointing, and all training modes have not been established.
 
-实际双眼目标100/110/125/150为2816×1512、3072×1663、3584×1890、4096×2268；原标准请求替换、回读不累加、其他/降低请求保留和关闭回退已验证。
+## Existing PC and Quest results
 
-2026-10-06用户反馈PC150画质很好；Quest110效果还行仍有锯齿，125明显卡顿，100锯齿严重。Quest0.2.0 APK未改变，本次未重复Quest实机测试，不承诺定量FPS/全剧情或舒适性。默认100/100，Quest优先110。
+The verified combined stereo render targets at 100%, 110%, 125%, and 150% are 2816×1512, 3072×1663, 3584×1890, and 4096×2268. The patch replaces the verified original request, avoids repeated scaling on readback, preserves unrelated or lower requests, and supports returning to the original resolution.
 
-原始设备序号、私有会话日志、存档、游戏或桌面截图均未上传。构建参考保留工具链版本和路径，不包含登录凭据。
+On October 6, the user reported that PC 150% looked very good. On Quest 3, 100% had severe aliasing, 110% looked acceptable but still showed aliasing, and 125% had noticeable stutter. Quest 0.2.0 is unchanged and was not retested in this update. No measured Quest frame rate, full-story result, or comfort result is claimed. The portable package defaults to 100% on both platforms; 110% is the suggested first Quest setting.
+
+Original device identifiers, private session logs, saves, game files, and desktop screenshots were not uploaded.

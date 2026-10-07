@@ -15,7 +15,7 @@ Status: the repository is PRIVATE and the Release is a DRAFT. The planned video 
 
 Capture real headset output and tracking, a consistent scene at each scale, Quest performance measurements, a longer gameplay segment, and a normal exit and restart.
 
-The October 7 PC 1.50× VDXR run passed the specific story transition that previously crashed. Its matching 01.01 session lasted about 12 minutes 24 seconds and exited with code 0. The 1.25× run passed startup only. These results do not establish full-story completion, every transition, a measured frame rate, long-term stability, or precise Move pointing. The video must keep those limits clear.
+The October 7 PC 1.50× VDXR run passed the specific story transition that previously crashed. Its matching 01.01 session lasted about 12 minutes 24 seconds and exited with code 0. The 1.25× run passed startup only. The user subsequently confirmed completing the full game on the tested PCVR / VDXR 1.50× setup. The video can state this full-playthrough result. Quantitative frame rate, repeated-run stability and precise Move pointing remain separate, unmeasured claims; standalone Quest full-game acceptance has not been added.
 
 ## Before any public release
 

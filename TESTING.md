@@ -2,6 +2,8 @@
 
 ## PCVR 0.2.1 (2026-10-07)
 
+**Full playthrough completed:** the user has confirmed finishing the complete game on the tested PCVR / VDXR 1.50× setup. This is user-reported gameplay acceptance, separate from the short automated startup checks below.
+
 On October 7, the user reran the original crashing story transition at 1.50× in the matching PCVDXR 01.01 setup. The targeted transition passed. The matching session lasted about 12 minutes 24 seconds and exited with code 0. The accepted core SHA-256 is 563be6008f73855c3b4425c93bca104692999e97f0fb16cf956c5d3aa40123c1. The paired memory budget was active, with no DirectMemory allocation failure or unhandled exception.
 
 The game graphics pool did not grow with the higher render scale, so a 36 MiB allocation failed. A malformed original out-of-memory message then caused a second crash. The fix grows the graphics pool and the matching per-process physical Backing/Direct budgets, and corrects the error message. It applies only when the game title, version, and instruction match. At 100%, the setting is off and the original game resolution is preserved.
@@ -10,7 +12,7 @@ Standalone desktop startup checks passed for 1.25× and 1.50× (45 seconds each)
 
 ## Acceptance limits
 
-The 1.50× result covers the requested original-crash transition only. The 1.25× run passed startup only. Full-story completion, other transitions, frame rate, long-term stability, precise Move pointing, and all training modes have not been established.
+PCVR / VDXR 1.50× full game completion is confirmed by the user. The 1.25× run passed startup only. This does not add measured frame-rate results, repeated-run stability tests, precise Move-pointing validation, or a full-playthrough result for standalone Quest.
 
 ## Existing PC and Quest results
 

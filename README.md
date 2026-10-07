@@ -59,7 +59,7 @@ Both components default to **100 / OFF**. Higher settings increase GPU and memor
 | 100 | Original resolution | Original resolution | Quest user reported strong aliasing |
 | 110 | Available | Available | Quest user found it acceptable, with visible aliasing |
 | 125 | Startup checked | Available | Quest user reported noticeable stutter |
-| 150 | Available | PC only | PC user reported good image quality and passed the previously crashing transition |
+| 150 | Available | PC only | PC user reported good image quality and completed a full playthrough |
 
 Quest **110** is the suggested starting profile. If performance is poor, return to 100. The tested PC was an i5-13400F / RTX 4070 / 64 GB RAM; no quantitative FPS or complete-story performance claim is made.
 
@@ -69,7 +69,7 @@ Verified per-eye targets are 1408×1512 at 100, 1536×1663 at 110, 1792×1890 at
 
 Higher resolution previously exhausted the game's fixed graphics memory pool during a story transition. A malformed out-of-memory message then caused a second crash. PCVR 0.2.1 grows the graphics pool and its matching process-local backing/direct-memory budget together, and corrects the message format. The extra budget is not written to saved settings.
 
-On **October 7, 2026**, the user confirmed that the requested **1.5× VDXR transition retest passed**. That session exited normally. PC125/150 startup checks and the 100 rollback check also passed. The Quest APK and Quest source remain at 0.2.0; this PC fix has not been applied to Quest.
+On **October 7, 2026**, the user confirmed **a completed full playthrough on PCVR / VDXR at 1.50×**. The previously crashing transition also passed its retest, and the recorded session exited normally. PC125/150 startup checks and the 100 rollback check also passed. The Quest APK and Quest source remain at 0.2.0; this PC fix has not been applied to Quest.
 
 See [testing details](TESTING.md) and the [user acceptance record](docs/USER_ACCEPTANCE_20261007.md).
 
@@ -90,8 +90,8 @@ Right-hand aim pose is bridged to the game's ordinary DualShock tracking. Basic 
 ## Current limits
 
 - Quest125 stutters on the user's headset; Quest110 still has aliasing.
-- PC150 passed the requested transition regression. PC125 has only been startup-checked in this repair round.
-- A complete playthrough, every scene transition, long-session stability, comfort, and measured headset FPS remain unverified.
+- **PCVR / VDXR 1.50×: full game completion confirmed by the user.** PC125 has only been startup-checked in this repair round.
+- Repeated-run stability, measured headset FPS, and comfort on other hardware have not been separately assessed.
 - Extra reprojection layers, complete Move support, and some tracking interfaces still have gaps.
 - This build targets FGO VR. Other PSVR games need their own compatibility checks.
 

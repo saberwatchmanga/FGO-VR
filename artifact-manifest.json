@@ -15,7 +15,7 @@
     "pc": 150,
     "quest": 110
   },
-  "acceptance": "User confirmed the requested PCVDXR150 transition regression passed; session exited0. PC125 startup only. Quest unchanged; no full-story or quantitative-FPS claim.",
+  "acceptance": "User confirmed a full playthrough on the tested PCVR/VDXR150 setup, following the passed transition regression. PC125 startup only. Quest unchanged; no quantitative-FPS or repeated-run stability claim.",
   "process_extra_direct_memory_mb": {
     "100": 0,
     "110": 432,
@@ -24,13 +24,13 @@
   },
   "known_issues": [
     "Quest125 stutters; Quest110 still has jaggies.",
-    "Full-story, long-session and complete Move/pointing support not established."
+    "Repeated-run stability, quantitative headset FPS and complete Move/pointing support not established."
   ],
   "artifacts": [
     {
       "name": "FGO-VR-0.2.1-PCVR-Windows.zip",
-      "bytes": 68476727,
-      "sha256": "a37468e8c3413af67fd9adb3351a1db42e5d8fbab224d57b169fed6429f04752"
+      "bytes": 68477069,
+      "sha256": "21592be9d7f7dab3e3c92df604a7d41675273d630079b2b1c27fee1dbca26f34"
     },
     {
       "name": "FGO-VR-0.2.0-Quest3.apk",
@@ -44,5 +44,11 @@
       "zh-CN"
     ]
   },
-  "settings_interface_language": "en"
+  "settings_interface_language": "en",
+  "user_confirmed_full_playthrough": {
+    "platform": "pcvr",
+    "runtime": "VDXR",
+    "profile": 150,
+    "reported_date": "2026-10-07"
+  }
 }

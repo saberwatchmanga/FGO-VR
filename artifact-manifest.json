@@ -1,7 +1,12 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "component_versions": {
+    "pcvr": "0.2.1",
+    "quest": "0.2.0"
+  },
   "upstream_commit": "9f42c44d4e838e3a0df67913e350c4f098110862",
   "game_assets_included": false,
+  "pc_optional_core_sha256": "563be6008f73855c3b4425c93bca104692999e97f0fb16cf956c5d3aa40123c1",
   "release_defaults": {
     "pc_scale": 100,
     "quest_scale": 100
@@ -10,13 +15,22 @@
     "pc": 150,
     "quest": 110
   },
-  "acceptance": "User headset image/tracking/basic controls; PC150 quality good, Quest110 acceptable with jaggies, Quest125 stutters. No quantitative FPS or full-story acceptance.",
-  "known_issue": "A recent PC150 ending session recorded 0xC0000005; cause not established.",
+  "acceptance": "User confirmed the requested PCVDXR150 transition regression passed; session exited0. PC125 startup only. Quest unchanged; no full-story or quantitative-FPS claim.",
+  "process_extra_direct_memory_mb": {
+    "100": 0,
+    "110": 432,
+    "125": 1212,
+    "150": 2560
+  },
+  "known_issues": [
+    "Quest125 stutters; Quest110 still has jaggies.",
+    "Full-story, long-session and complete Move/pointing support not established."
+  ],
   "artifacts": [
     {
-      "name": "FGO-VR-0.2.0-PCVR-Windows.zip",
-      "bytes": 68461091,
-      "sha256": "3aa9d2aaa7de198f48cfcba50e016d79c9916df597010373b5e472256f26c521"
+      "name": "FGO-VR-0.2.1-PCVR-Windows.zip",
+      "bytes": 68471992,
+      "sha256": "e97a1f4578e40145ed45fc769c0f1de787173f6120aa211b7d77bd993f9c2c21"
     },
     {
       "name": "FGO-VR-0.2.0-Quest3.apk",

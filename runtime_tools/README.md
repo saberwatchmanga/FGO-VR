@@ -1,14 +1,14 @@
-# FGO VR — PCVR / Quest 3 compatibility preview
+# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0 compatibility preview
 
 AstroQuest/shadPS4-based compatibility work for **Fate/Grand Order VR feat. Mash Kyrielight**, Japanese title **CUSA09078**, game versions **01.00 / 01.01**. PC uses OpenXR through Virtual Desktop / VDXR; the Quest APK runs locally using an ARM64 core, FEX and Turnip.
 
 本仓库目前为**私有预览**。兼容演示和后续游玩素材将一起制作发布视频；视频发布后再公开仓库和Release。现在不自动公开。
 
-## 用户实测（2026-10-06）
+## 用户实测（PC：2026-10-07；Quest：2026-10-06）
 
 | 路线 / 档位 | 用户反馈 | 建议 |
 | --- | --- | --- |
-| PC / VDXR 1.50 | 画质效果很好 | 在测试PC配置上可用；仍需测长时间稳定性 |
+| PC / VDXR 1.50 | 画质效果很好 | 原闪退剧情转场复测通过；全剧情/长期稳定性未完整验收 |
 | Quest 3 1.00 | 锯齿严重 | 原版回退档 |
 | Quest 3 1.10 | 效果还行，仍有锯齿 | Quest优先尝试此档 |
 | Quest 3 1.25 | 明显卡顿 | 性能测试档，卡顿时回退 |
@@ -17,13 +17,19 @@ AstroQuest/shadPS4-based compatibility work for **Fate/Grand Order VR feat. Mash
 
 已验证游戏内真实目标增长：每眼100=1408×1512、110=1536×1663、125=1792×1890、PC150=2048×2268。倍率补丁仅替换游戏已核实的1.4f请求，保留其他请求和Unity分配检查，避免读回/设置循环重复放大。VDXR显示的百分比与游戏内部倍率分别记录。
 
+## PCVR 0.2.1 转场修复
+
+高倍率曾在剧情转场申请图形内存失败，原游戏报错字符串又触发闪退。现在同步增长游戏图形池和模拟器本进程的配套内存预算，修正报错字符串；100关闭档保留原程序回退。临时预算不写入保存设置，沿用原存档。
+
+用户2026-10-07确认“1.5倍测试通过了”，本轮VDXR会话正常退出。125/150短时桌面启动及100回退均通过。此修复增加PC内存需求；发布包仍默认100，由用户选择倍率。Quest APK与Quest源码沿用0.2.0，本次没有把PC修复套入Quest。详细边界见[验证摘要](TESTING.md)与[用户验收](docs/USER_ACCEPTANCE_20261007.md)。
+
 ## 下载与启动
 
 维护者在Draft Release中准备Windows便携ZIP、Quest0.2.0 APK、源码ZIP和SHA256SUMS。APK与便携包不包含PS4游戏、PKG、固件、用户存档或密钥。
 
 ### Windows / PCVR
 
-1. 解压 `FGO-VR-0.2.0-PCVR-Windows.zip`。
+1. 解压 `FGO-VR-0.2.1-PCVR-Windows.zip`。
 2. 将自己的已解包本体放入 `FGO-PC/games/CUSA09078`，其中包含 `eboot.bin`；更新放入 `CUSA09078-UPDATE`。本体缺失时更新不能独立启动。
 3. 安装并连接Virtual Desktop，启动Streamer。入口对子进程指定VDXR，不更改系统OpenXR注册。
 4. 双击 `启动FGO-VR-PCVR-VD.cmd`。关闭模拟器窗口退出。
@@ -54,7 +60,7 @@ AstroQuest/shadPS4-based compatibility work for **Fate/Grand Order VR feat. Mash
 ## 已知问题与验收边界
 
 - Quest125用户报告明显卡顿，110仍有锯齿；不承诺稳定帧率或舒适性。
-- 最近PC150会话在结束阶段记录 `0xC0000005`，故障尚未定位，不把画质良好等同稳定性，也不直接归因于倍率。
+- PC0.2.1修复高倍率剧情转场的图形池不足及错误日志格式：图形池与本进程总Backing/Direct预算同步增长。用户确认1.5倍原转场复测通过；1.25倍本次仅验证启动，不宣称完整剧情通过。
 - 当前额外重投影层、完整Move与部分追踪接口尚有缺口。完整剧情、场景切换和长期运行未完整验收。
 - 不支持任意PSVR游戏；其他标题需各自验证。
 

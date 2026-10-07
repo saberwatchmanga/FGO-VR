@@ -12,6 +12,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#ifdef _WIN32
+#include <cstdio>
+#include <windows.h>
+#endif
 #include <fmt/format.h>
 
 #include "common/elf_info.h"
@@ -21,6 +25,7 @@
 #include "core/known_title.h"
 #include "core/linker.h"
 #include "core/module.h"
+#include "core/libraries/libc_internal/mspace.h"
 #include "core/vr/vr_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
@@ -29,6 +34,101 @@ namespace Core::KnownTitle {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+#ifdef _WIN32
+using FgoAllocatorFn = VAddr (PS4_SYSV_ABI *)(VAddr, u64, u32);
+
+VAddr PS4_SYSV_ABI TraceFgoAllocator(VAddr object, u64 bytes, u32 alignment, u32 label,
+                                     VAddr guest_frame, VAddr guest_stack) {
+    // Execute precisely the original virtual allocator call, including failures.
+    const auto table = *reinterpret_cast<const VAddr*>(object);
+    const auto target = *reinterpret_cast<const VAddr*>(table + 0x10);
+    const auto result = reinterpret_cast<FgoAllocatorFn>(target)(object, bytes, alignment);
+    if (result != 0) return result;
+    FILE* file = std::fopen("user/log/fgo_allocation_failure.txt", "ab");
+    if (file == nullptr) return result;
+    std::fprintf(file, "FGO allocation failure object=%llx vtable=%llx target=%llx "
+                       "bytes=%llx alignment=%x label=%x frame=%llx stack=%llx\n",
+                 object, table, target, bytes, alignment, label, guest_frame, guest_stack);
+    // The captured GFX allocator delegates to the game's LLE libc mspace.
+    // Record its actual context safely; HLE stats apply only if a future run
+    // resolves this handle to our own arena, never to a guest libc heap.
+    if (table == 0x8013c9190 && target == 0x800f0bdf0) {
+        VAddr context{};
+        u64 fields[8]{};
+        SIZE_T count{};
+        if (ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(object + 0x38),
+                              &context, sizeof(context), &count) && count == sizeof(context) &&
+            ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(context),
+                              fields, sizeof(fields), &count) && count >= 4 * sizeof(u64)) {
+            std::fprintf(file, "gfx_context=%llx handle=%llx base=%llx capacity=%llx\n",
+                         context, fields[1], fields[2], fields[3]);
+            const auto stats = Libraries::LibcInternal::MspaceQueryStats(
+                reinterpret_cast<void*>(fields[1]), alignment);
+            if (stats) {
+            std::fprintf(file, "arena base=%llx capacity=%llx used=%llx free=%llx "
+                               "largest_aligned=%llx allocations=%llu\n",
+                         static_cast<u64>(stats->base), static_cast<u64>(stats->capacity),
+                         static_cast<u64>(stats->used), static_cast<u64>(stats->free),
+                         static_cast<u64>(stats->largest_aligned_block),
+                         static_cast<u64>(stats->allocation_count));
+            }
+        }
+    }
+    u64 words[96]{};
+    SIZE_T copied = 0;
+    ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(object),
+                      words, sizeof(words), &copied);
+    for (SIZE_T i = 0; i < copied / sizeof(words[0]); ++i) {
+        std::fprintf(file, "object[%llx]=%llx\n", static_cast<u64>(i * 8), words[i]);
+    }
+    VAddr frame = guest_frame;
+    for (int depth = 0; depth < 24 && frame != 0; ++depth) {
+        u64 pair[2]{};
+        copied = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(frame),
+                               pair, sizeof(pair), &copied) || copied != sizeof(pair)) break;
+        std::fprintf(file, "frame[%d]=%llx return=%llx\n", depth, frame, pair[1]);
+        if (pair[0] <= frame || pair[0] - frame > 0x100000) break;
+        frame = pair[0];
+    }
+    std::fclose(file);
+    return result;
+}
+
+void PatchFgoAllocatorTrace(VAddr base, u64 size) {
+    const char* enabled = std::getenv("SHADPS4_FGO_CRASH_DIAGNOSTICS");
+    if (enabled == nullptr || std::strcmp(enabled, "1") != 0) return;
+    constexpr u64 Dispatch = 0x4f6e64;
+    constexpr std::array<u8, 11> Original{
+        0x48,0x8b,0x07,0x4c,0x89,0xf6,0x89,0xda,0xff,0x50,0x10};
+    constexpr u64 Cave = 0x138fc40;
+    constexpr std::array<u8, 48> Empty{};
+    if (size < Cave + Empty.size() ||
+        std::memcmp(reinterpret_cast<void*>(base + Dispatch), Original.data(), Original.size()) ||
+        std::memcmp(reinterpret_cast<void*>(base + Cave), Empty.data(), Empty.size())) {
+        LOG_WARNING(Core, "FGO allocator diagnostics: signatures differ, not applied");
+        return;
+    }
+    // RSI=size, EDX=alignment, ECX=label, R8/R9=the original frame/stack.
+    // Original call site is SysV-aligned; wrapper preserves its callee-saved registers.
+    std::array<u8, 31> code{
+        0x4c,0x89,0xf6,0x89,0xda,0x44,0x89,0xf9,
+        0x49,0x89,0xe8,0x49,0x89,0xe1,
+        0x48,0xb8,0,0,0,0,0,0,0,0,0xff,0xd0,0xe9,0,0,0,0};
+    const u64 callback = reinterpret_cast<u64>(&TraceFgoAllocator);
+    const s32 back = static_cast<s32>(static_cast<s64>(Dispatch + Original.size()) -
+                                      static_cast<s64>(Cave + code.size()));
+    std::memcpy(code.data() + 16, &callback, sizeof(callback));
+    std::memcpy(code.data() + 27, &back, sizeof(back));
+    std::array<u8, 6> branch{0xe9,0,0,0,0,0x90};
+    const s32 forward = static_cast<s32>(static_cast<s64>(Cave) - static_cast<s64>(Dispatch + 5));
+    std::memcpy(branch.data() + 1, &forward, sizeof(forward));
+    std::memcpy(reinterpret_cast<void*>(base + Cave), code.data(), code.size());
+    std::memcpy(reinterpret_cast<void*>(base + Dispatch), branch.data(), branch.size());
+    LOG_INFO(Core, "FGO allocator diagnostics: original GPU-label dispatch retained, failed calls traced");
+}
+#endif
 
 // FGO VR uses Unity's native renderScale to size its eye render targets. This is
 // independent of the viewport scale and of the OpenXR compositor's output size.
@@ -49,6 +149,84 @@ float FgoRenderScale() {
         return 1.0f;
     }();
     return scale;
+}
+
+// The concrete ALLOC_GFX captured on the failed texture creation uses one fixed
+// mspace. Its capacity is chosen in R15 (default 62 MiB, or the game's configured
+// MiB count), then passed unchanged to direct allocation, mapping, mspace creation
+// and the context's capacity field. Grow THAT value once before these operations.
+// Do not assume that the unrelated 256/208 MiB PS4 pools back this allocator.
+bool PatchFgoGfxBudget(VAddr base, u64 size, float scale, bool apply) {
+    constexpr u64 Site = 0x4f82f2;
+    constexpr u64 Cave = 0x138fc80;
+    constexpr u64 GfxName = 0x1184304;
+    constexpr u64 OomFormat = 0x118416b;
+    constexpr char OriginalOom[] =
+        "Could not allocate memory: System out of memory!\n"
+        "Trying to allocate: %zuB with zu alignment. MemoryLabel: %s\n"
+        "Allocation happend at: Line:%d in %s\n";
+    struct Signature { u64 at; std::vector<u8> bytes; };
+    const std::array<Signature, 7> signatures{{
+        {Site, {0x4c,0x8b,0x35,0x37,0x9e,0xee,0x00}},
+        {0x4f8314, {0x48,0x8d,0x05,0xe9,0xbf,0xc8,0x00}},
+        {0x4f8324, {0x48,0x8d,0x0d,0x65,0x0e,0xed,0x00}},
+        {0x4f83b1, {0x4c,0x89,0xfa,0xe8,0xa7,0x77,0xbf,0x00}},
+        {0x4f83d4, {0x4c,0x89,0xfe,0xe8,0xb4,0x77,0xbf,0x00}},
+        {0x4f86a0, {0x4c,0x89,0xfa,0x48,0x89,0xb5,0x78,0xff,0xff,0xff,
+                    0xe8,0x71,0x74,0xbf,0x00}},
+        {0x4f841d, {0x4d,0x89,0xb5,0x18,0x23,0x00,0x00}},
+    }};
+    constexpr std::array<u8, 63> Empty{};
+    if (size < Cave + Empty.size() || size < GfxName + sizeof("ALLOC_GFX") ||
+        size < OomFormat + sizeof(OriginalOom) ||
+        std::memcmp(reinterpret_cast<const void*>(base + GfxName), "ALLOC_GFX",
+                    sizeof("ALLOC_GFX")) != 0 ||
+        std::memcmp(reinterpret_cast<const void*>(base + OomFormat), OriginalOom,
+                    sizeof(OriginalOom)) != 0 ||
+        std::memcmp(reinterpret_cast<const void*>(base + Cave), Empty.data(), Empty.size()) != 0) {
+        return false;
+    }
+    for (const auto& signature : signatures) {
+        if (size < signature.at + signature.bytes.size() ||
+            std::memcmp(reinterpret_cast<const void*>(base + signature.at),
+                        signature.bytes.data(), signature.bytes.size()) != 0) return false;
+    }
+    if (!apply) return true;
+    // The 125 target is aligned to 1792 rather than 1760 pixels per eye:
+    // its measured area ratio is 35/22, a little larger than 1.25 squared.
+    // The 110 and 150 nominal squares already exceed their measured area ratios.
+    const u32 numerator = scale == 1.10f ? 121 : scale == 1.25f ? 35 : 9;
+    const u32 denominator = scale == 1.10f ? 100 : scale == 1.25f ? 22 : 4;
+    // Preserve RAX/RDX/RCX. Nonpositive configured capacities keep the original
+    // failure path. Valid capacity comes from a signed 32-bit MiB count, so even
+    // the largest value times 121 fits in 64 bits. Round UP to the original 2 MiB
+    // direct-memory alignment, and relocate the displaced R14 load correctly.
+    std::array<u8, 63> code{
+        0x50,0x52,0x51,0x4d,0x85,0xff,0x7e,0x28,
+        0x4c,0x89,0xf8,0xb9,0,0,0,0,0x48,0xf7,0xe1,
+        0x48,0x83,0xc0,0,0xb9,0,0,0,0,0x31,0xd2,0x48,0xf7,0xf1,
+        0x48,0x05,0xff,0xff,0x1f,0x00,0x48,0x25,0x00,0x00,0xe0,0xff,
+        0x49,0x89,0xc7,0x59,0x5a,0x58,0x4c,0x8b,0x35,0,0,0,0,
+        0xe9,0,0,0,0};
+    std::memcpy(code.data() + 12, &numerator, sizeof(numerator));
+    code[22] = static_cast<u8>(denominator - 1);
+    std::memcpy(code.data() + 24, &denominator, sizeof(denominator));
+    constexpr s32 original_pointer = static_cast<s32>(s64{0x13e2130} - s64{Cave + 58});
+    constexpr s32 return_to_site = static_cast<s32>(s64{Site + 7} - s64{Cave + 63});
+    std::memcpy(code.data() + 54, &original_pointer, sizeof(original_pointer));
+    std::memcpy(code.data() + 59, &return_to_site, sizeof(return_to_site));
+    std::array<u8, 7> branch{0xe9,0,0,0,0,0x90,0x90};
+    constexpr s32 to_cave = static_cast<s32>(s64{Cave} - s64{Site + 5});
+    std::memcpy(branch.data() + 1, &to_cave, sizeof(to_cave));
+    std::memcpy(reinterpret_cast<void*>(base + Cave), code.data(), code.size());
+    std::memcpy(reinterpret_cast<void*>(base + Site), branch.data(), branch.size());
+    // Correct the missing conversion without moving this string or its neighbors.
+    // Allocation errors remain real errors and keep Unity's original handling.
+    *reinterpret_cast<u8*>(base + OomFormat + 78) = '%';
+    LOG_INFO(Core, "FGO GFX pool: original chosen capacity grows by {}/{} of bytes, "
+                   "rounded to 2 MiB; direct allocation/map/mspace size stay consistent. "
+                   "Unity OOM alignment format corrected", numerator, denominator);
+    return true;
 }
 
 void PatchFgoRenderScale(VAddr base, u64 size) {
@@ -107,6 +285,11 @@ void PatchFgoRenderScale(VAddr base, u64 size) {
         LOG_WARNING(Core, "FGO resolution: executable padding differs; patch disabled");
         return;
     }
+    if (!PatchFgoGfxBudget(base, size, scale, false)) {
+        LOG_WARNING(Core, "FGO resolution: GFX allocator signatures differ; entire patch disabled");
+        return;
+    }
+    if (!PatchFgoGfxBudget(base, size, scale, true)) return;
     // movd eax,xmm0; cmp eax,1.4f bits; jne original; movss xmm0,[chosen];
     // jmp native setter. RAX is caller-saved and not an argument to this wrapper.
     // A read-back value or a lower/different request is passed through, so repeated
@@ -127,6 +310,9 @@ void PatchFgoRenderScale(VAddr base, u64 size) {
     LOG_INFO(Core, "FGO resolution: canonical Unity renderScale 1.4 -> {:.2f} ({:.2f}x), "
                    "approximately {:.0f}% of original pixels; other requests and viewport unchanged",
              requested, scale, scale * scale * 100.0f);
+#ifdef _WIN32
+    PatchFgoAllocatorTrace(base, size);
+#endif
 }
 
 // Astro Bot Rescue Mission, CUSA12392, in the build whose code at SetRecentre reads as below
@@ -842,6 +1028,25 @@ u32 FramePace() {
 }
 
 void Prepare() {
+    EmulatorSettings.SetProcessExtraDmemMinimum(std::nullopt);
+#ifndef __aarch64__
+    if (Common::ElfInfo::Instance().GameSerial() == "CUSA09078") {
+        const auto version = Common::ElfInfo::Instance().AppVer();
+        const float scale = FgoRenderScale();
+        if ((version == "01.00" || version == "01.01") && scale != 1.0f) {
+            // The real retail FGO ALLOC_GFX selected 2 GiB in the captured run.
+            // Reserve its proportional increase BEFORE AddressSpace constructs
+            // physical backing. All backing/direct/flexible layout code reads
+            // this same effective setting. Keep the original non-GFX headroom.
+            const s32 extra_mb = scale == 1.10f ? 432 : scale == 1.25f ? 1212 : 2560;
+            EmulatorSettings.SetProcessExtraDmemMinimum(extra_mb);
+            LOG_INFO(Core, "FGO resolution memory: process-local extra direct backing {} MiB; "
+                           "minimum {}, saved settings unchanged",
+                     EmulatorSettings.GetExtraDmemInMBytes(), extra_mb);
+        }
+        return;
+    }
+#endif
     if (Common::ElfInfo::Instance().GameSerial() != "CUSA12392") {
         return;
     }

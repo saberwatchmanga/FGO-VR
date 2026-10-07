@@ -20,3 +20,5 @@ Windows原版回退核心对应 `patches/baseline/fgo-pcvr.patch`；可选分辨
 脚本中的VS/Java路径是开发机路径快照，工具目录需按自己的环境调整。Quest还需上游AstroQuest APK运行库、LLVM、sysroot以及PC字体嵌入工具。脚本不含游戏数据、发布签名私钥或GitHub凭据；自行签名的APK不能直接覆盖不同签名的已安装版本。
 
 完整历史构建/设备日志不上传；公开可用的摘要在TESTING.md，文件校验在SHA256SUMS和artifact-manifest.json。
+
+PC0.2.1 complete.patch已包含图形池/Backing预算修复及可选Windows故障诊断；EmulatorSettings进程字段不进入保存配置。portable launcher将诊断与修复开关路由到同一已验收可选核心。Quest complete.patch仍为0.2.0，平台补丁不可交叉套用。

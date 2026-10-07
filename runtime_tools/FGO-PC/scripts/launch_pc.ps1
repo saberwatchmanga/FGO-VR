@@ -3,7 +3,9 @@ param(
     [ValidateSet('Desktop', 'PcVr')][string]$Mode = 'Desktop',
     [ValidateRange(0, 600)][int]$HeadsetWaitSeconds = 60,
     [switch]$NoHeadsetPause,
-    [ValidateSet('100', '110', '125', '150')][string]$RenderScale
+    [ValidateSet('100', '110', '125', '150')][string]$RenderScale,
+    [switch]$CrashDiagnostics,
+    [switch]$TransitionFix
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -12,6 +14,8 @@ $FgoRuntimeDir = Join-Path $FgoInstallDir 'runtime'
 if ($Mode -eq 'PcVr') { $FgoRuntimeDir = Join-Path $FgoInstallDir 'runtime-vr' }
 $FgoExe = Join-Path $FgoRuntimeDir 'shadps4.exe'
 $FgoResolutionExe = Join-Path (Split-Path -Parent $FgoInstallDir) 'FGO-Resolution\runtime-pc\shadps4.exe'
+$FgoDiagnosticExe = Join-Path (Split-Path -Parent $FgoInstallDir) 'FGO-Resolution\runtime-pc\shadps4.exe'
+$FgoTransitionExe = Join-Path (Split-Path -Parent $FgoInstallDir) 'FGO-Resolution\runtime-pc\shadps4.exe'
 $FgoScale = '100'
 if ($Mode -eq 'PcVr') {
     if ($RenderScale) {
@@ -37,11 +41,23 @@ if ($Mode -eq 'PcVr') {
         }
     }
 }
+if ($CrashDiagnostics) {
+    if ($Mode -ne 'PcVr' -or -not (Test-Path -LiteralPath $FgoDiagnosticExe)) {
+        throw 'The independent PCVR diagnostic runtime is missing.'
+    }
+    $FgoExe = $FgoDiagnosticExe
+}
+if ($TransitionFix) {
+    if ($Mode -ne 'PcVr' -or -not (Test-Path -LiteralPath $FgoTransitionExe)) {
+        throw 'The independent PCVR transition-fix runtime is missing.'
+    }
+    $FgoExe = $FgoTransitionExe
+}
 $FgoGame = Join-Path $FgoInstallDir 'games\CUSA09078\eboot.bin'
 if (-not (Test-Path -LiteralPath $FgoExe) -or -not (Test-Path -LiteralPath $FgoGame)) {
     throw 'FGO PC runtime or game file is missing. Read FGO-PC/README.md.'
 }
-if (Get-Process -Name shadps4 -ErrorAction SilentlyContinue | Where-Object { $_.Path -in @((Join-Path $FgoRuntimeDir 'shadps4.exe'), $FgoResolutionExe) }) {
+if (Get-Process -Name shadps4 -ErrorAction SilentlyContinue | Where-Object { $_.Path -in @((Join-Path $FgoRuntimeDir 'shadps4.exe'), $FgoResolutionExe, $FgoDiagnosticExe, $FgoTransitionExe) }) {
     throw 'This FGO PC runtime is already running. Close its game window first.'
 }
 foreach ($FgoEnvName in @(Get-ChildItem Env: | Where-Object Name -Like 'SHADPS4_*' | ForEach-Object Name)) {
@@ -54,6 +70,7 @@ $env:SHADPS4_XR_WAIT = '0'
 $env:SHADPS4_XR_PAUSE = '0'
 $env:SHADPS4_TITLE_TIMESTEP = '0'
 $env:SHADPS4_FGO_RENDER_SCALE = $FgoScale
+if ($CrashDiagnostics) { $env:SHADPS4_FGO_CRASH_DIAGNOSTICS = '1' }
 $FgoRuntimeManifest = $null
 if ($Mode -eq 'PcVr') {
     $FgoRuntimeManifest = Join-Path $env:ProgramFiles 'Virtual Desktop Streamer\OpenXR\virtualdesktop-openxr.json'
@@ -82,6 +99,8 @@ $FgoArguments = @('-g', ('"' + $FgoGame + '"'), '-f', 'false')
 if ($GameVersion -eq '01.00') { $FgoArguments += '--ignore-game-patch' }
 $FgoSessionName = (Get-Date -Format 'yyyyMMdd_HHmmssfff') + '_' + $GameVersion
 if ($Mode -eq 'PcVr') { $FgoSessionName += '_PCVR' }
+if ($TransitionFix) { $FgoSessionName += '_TRANSITIONFIX' }
+if ($CrashDiagnostics) { $FgoSessionName += '_DIAGNOSTIC' }
 $FgoSession = Join-Path $FgoInstallDir ('sessions\' + $FgoSessionName)
 New-Item -ItemType Directory -Path $FgoSession | Out-Null
 $FgoHashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
@@ -101,6 +120,8 @@ $FgoRecord = [ordered]@{
     started_at = (Get-Date).ToString('o')
     mode = $Mode
     resolution_percent_requested = [int]$FgoScale
+    crash_diagnostics = [bool]$CrashDiagnostics
+    transition_fix = [bool]$TransitionFix
     openxr_runtime_manifest = $FgoRuntimeManifest
     environment = [ordered]@{}
 }
@@ -108,6 +129,16 @@ foreach ($FgoEnv in @(Get-ChildItem Env: | Where-Object { $_.Name -like 'SHADPS4
     $FgoRecord.environment[$FgoEnv.Name] = $FgoEnv.Value
 }
 $FgoRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $FgoSession 'run.json') -Encoding UTF8
+if ($CrashDiagnostics) {
+    foreach ($FgoDiagnosticLogName in @('fgo_crash_context.txt', 'fgo_allocation_failure.txt', 'fgo_gfx_pool.txt')) {
+        $FgoCrashLog = Join-Path $FgoRuntimeDir ('user\log\' + $FgoDiagnosticLogName)
+        if (Test-Path -LiteralPath $FgoCrashLog) {
+            Move-Item -LiteralPath $FgoCrashLog -Destination (Join-Path $FgoSession ('previous_' + $FgoDiagnosticLogName))
+        }
+    }
+    Write-Host 'FGO PCVR diagnostic: normal-speed gameplay; crash context will be preserved automatically.'
+}
+if ($TransitionFix) { Write-Host 'Transition fix test: graphics memory budget follows resolution; original saves and VDXR.' }
 Write-Host ('FGO VR ' + $Mode + ' ' + $GameVersion + ' - Q / E: game confirm, arrows: menu selection, Enter: Options')
 if ($Mode -eq 'PcVr') {
     Write-Host ('Internal resolution: ' + $FgoScale + '% of original dimensions (100 = OFF). Restart to change.')

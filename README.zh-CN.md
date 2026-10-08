@@ -1,10 +1,16 @@
 # FGO VR — PCVR 0.2.1 / Quest 3 0.2.0 兼容预览
 
-[English](README.md) | 简体中文
+[English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
 本项目基于 AstroQuest/shadPS4，为 **Fate/Grand Order VR feat. Mash Kyrielight** 提供兼容支持，目标为日版 PS4 游戏 **CUSA09078**，版本 **01.00 / 01.01**。PC 通过 Virtual Desktop / VDXR 使用 OpenXR；Quest APK 则使用 ARM64 核心、FEX 和 Turnip 在头显本地运行。
 
-本仓库目前为**私有预览**。兼容演示和后续游玩素材将一起制作发布视频；视频发布后再公开仓库和Release。现在不自动公开。
+本仓库目前为**私有预览**。兼容演示和后续游玩素材将一起制作发布视频；计划仓库、Release与视频一起公开。现在不自动公开。
+
+## 视频预览
+
+[观看兼容演示视频](https://youtu.be/zBSpUSqpUaw)。视频当前为YouTube私享，只有拥有者授权的观众可以观看；计划2026-10-10与GitHub项目一起公开，目前没有设置自动发布。
+
+视频PCVR片段使用VDXR、内部1.50倍；Quest单机片段为头显本地1.00倍。有游戏PC时优先推荐Virtual Desktop串流，画质更好。本次八语言支持指README及视频资料，原版日语游戏和英文设置界面没有翻译。
 
 ## 用户实测（PC：2026-10-07；Quest：2026-10-06）
 
@@ -32,7 +38,7 @@
 ### Windows / PCVR
 
 1. 解压 `FGO-VR-0.2.1-PCVR-Windows.zip`。
-2. 将自己的已解包本体放入 `FGO-PC/games/CUSA09078`，其中包含 `eboot.bin`；更新放入 `CUSA09078-UPDATE`。本体缺失时更新不能独立启动。
+2. 将自己的已解包本体放入 `FGO-PC/games/CUSA09078`，其中包含 `eboot.bin`；可选1.01更新放入 `CUSA09078-UPDATE`。本体缺失时更新不能独立启动。
 3. 安装并连接Virtual Desktop，启动Streamer。入口对子进程指定VDXR，不更改系统OpenXR注册。
 4. 双击 `Launch-PCVR.cmd`（也保留原中文入口）。关闭模拟器窗口退出。
 5. `Resolution-Settings.cmd` 提供设置窗口（需Python3/Tk）。没有Python也可编辑 `FGO-Resolution/settings.json`，或使用 `profiles` 内的直接档位入口。设置重启后生效。
@@ -44,7 +50,7 @@
 
 ### Quest 3 本地
 
-安装 `FGO-VR-0.2.0-Quest3.apk`（包名 `com.fgovr.quest`，版本码2）。同签名升级可保留数据。使用ADB将自己的解包目录放入：
+安装 `FGO-VR-0.2.0-Quest3.apk`（包名 `com.fgovr.quest`，版本码2）。同签名升级可保留数据。使用ADB将自己的本体解包目录放入第一项；只有持有可选1.01更新时才复制第二项：
 
 ```text
 /data/local/tmp/fgovr/games/CUSA09078
@@ -64,6 +70,7 @@
 - Quest125用户报告明显卡顿，110仍有锯齿；不承诺稳定帧率或舒适性。
 - PC0.2.1修复高倍率剧情转场的图形池不足及错误日志格式：图形池与本进程总Backing/Direct预算同步增长。用户确认PCVR1.5倍完整通关；1.25倍本次仅验证启动。
 - 当前额外重投影层、完整Move与部分追踪接口尚有缺口。PCVR1.5倍完整通关已获用户确认；重复运行稳定性与定量帧率未单独测试。
+- 另一次PC150会话在Unity预加载阶段发生访问异常，原因未定位，见[验证摘要](TESTING.md)；不将完整通关等同于每次运行稳定。
 - 不支持任意PSVR游戏；其他标题需各自验证。
 
 ## 源码与构建

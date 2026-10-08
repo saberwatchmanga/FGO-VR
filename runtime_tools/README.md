@@ -1,13 +1,19 @@
 # FGO VR — PCVR 0.2.1 / Quest 3 0.2.0
 
-English | [简体中文](README.zh-CN.md)
+[English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
 Play **Fate/Grand Order VR feat. Mash Kyrielight** using an AstroQuest/shadPS4-based compatibility build. This project targets the Japanese PS4 title **CUSA09078**, game versions **01.00 / 01.01**.
 
 - **PCVR:** OpenXR through Virtual Desktop and VDXR.
 - **Standalone Quest 3:** a local ARM64 core using FEX and Turnip; the PC does not stream the game frames.
 
-This is currently a **private preview**. The repository and releases will stay private/draft until the planned release video is published. Packages include no PS4 game data, PKGs, firmware, keys, or user saves. Provide your own extracted game.
+This is currently a **private preview**. The repository and releases will stay private/draft until the planned coordinated launch. Packages include no PS4 game data, PKGs, firmware, keys, or user saves. Provide your own extracted game.
+
+## Video preview
+
+[Watch the release demonstration](https://youtu.be/zBSpUSqpUaw). It is currently private on YouTube; only viewers authorized by the owner can watch it. The maintainer plans to publish the video and GitHub project together on October 10, 2026. No automatic publication is scheduled.
+
+PCVR footage uses VDXR at **1.50×** internal resolution. Standalone footage was recorded locally on Quest 3 at **1.00×**. With a gaming PC, Virtual Desktop streaming is recommended for better image quality. The README is available in eight languages; the original Japanese game and English settings interface are unchanged.
 
 ## Downloads
 
@@ -37,7 +43,7 @@ Save location: `FGO-PC/runtime-vr/user/home/1000/savedata/CUSA09078`. Close the 
 
 ## Standalone Quest 3 quick start
 
-Install `FGO-VR-0.2.0-Quest3.apk` (package `com.fgovr.quest`, version code 2). Updating with the same signature can preserve app data. Enable USB debugging and copy your extracted game folders to:
+Install `FGO-VR-0.2.0-Quest3.apk` (package `com.fgovr.quest`, version code 2). Updating with the same signature can preserve app data. Enable USB debugging and copy your extracted base game to the first path below. Copy the update to the second path only if you have the optional 1.01 update:
 
 ```text
 /data/local/tmp/fgovr/games/CUSA09078
@@ -91,7 +97,7 @@ Right-hand aim pose is bridged to the game's ordinary DualShock tracking. Basic 
 
 - Quest125 stutters on the user's headset; Quest110 still has aliasing.
 - **PCVR / VDXR 1.50×: full game completion confirmed by the user.** PC125 has only been startup-checked in this repair round.
-- Repeated-run stability, measured headset FPS, and comfort on other hardware have not been separately assessed.
+- A separate later PC150 session ended with an access violation during Unity preload. Its cause is unresolved; see [testing details](TESTING.md). Repeated-run stability, measured headset FPS, and comfort on other hardware have not been separately assessed.
 - Extra reprojection layers, complete Move support, and some tracking interfaces still have gaps.
 - This build targets FGO VR. Other PSVR games need their own compatibility checks.
 

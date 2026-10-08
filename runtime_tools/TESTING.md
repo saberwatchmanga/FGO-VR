@@ -14,6 +14,10 @@ Standalone desktop startup checks passed for 1.25× and 1.50× (45 seconds each)
 
 PCVR / VDXR 1.50× full game completion is confirmed by the user. The 1.25× run passed startup only. This does not add measured frame-rate results, repeated-run stability tests, precise Move-pointing validation, or a full-playthrough result for standalone Quest.
 
+## Later unresolved session
+
+A separate PC150 session on October 7 ended with an access violation (0xC0000005) during Unity preload. Its cause has not been diagnosed, and no causal link to render scale or the repaired graphics-pool allocation is established. Two other recording sessions ended normally. This later failure does not retract the user's completed full playthrough; it is why repeat stability remains unvalidated. Private device logs and file paths are retained locally and are not included here.
+
 ## Existing PC and Quest results
 
 The verified combined stereo render targets at 100%, 110%, 125%, and 150% are 2816×1512, 3072×1663, 3584×1890, and 4096×2268. The patch replaces the verified original request, avoids repeated scaling on readback, preserves unrelated or lower requests, and supports returning to the original resolution.

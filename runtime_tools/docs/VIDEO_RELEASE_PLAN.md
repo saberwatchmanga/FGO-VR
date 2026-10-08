@@ -1,25 +1,21 @@
-# Private Preview and Coordinated Video Release
+# Release and Demonstration Video
 
-Current status: the repository is **PRIVATE**, release **v0.2.1 is a DRAFT**, and the YouTube video is **private**. Preparation does not authorize publication today.
+The maintainer authorized public GitHub availability on October 9, 2026, after scheduling the YouTube video for 8:00. The project is public and release v0.2.1 provides the complete Windows portable folder, Quest APK, source archive, and checksums. The previously planned October10 private-preview gate is superseded by this explicit publication instruction.
 
-## Video
+[Watch FGO VR on Meta Quest 3](https://youtu.be/zBSpUSqpUaw). The YouTube schedule is maintainer-reported; this project does not manage the video's visibility. If the video is not available yet, wait for its scheduled publication.
 
-[FGO VR on Meta Quest 3](https://youtu.be/zBSpUSqpUaw) is uploaded privately. Only viewers authorized by its owner can watch it. The maintainer plans to publish the video and GitHub project together on **October 10, 2026**, at the same time the next day. No precise clock time or automatic schedule has been set.
+## Installation and footage
 
-The completed video shows PCVR gameplay through Virtual Desktop/VDXR at 1.50x internal resolution, and genuine standalone Quest 3 gameplay recorded locally at 1.00x. It includes setup instructions, controls, resolution settings, limitations, and upstream credits. English is the default language; English, Simplified Chinese, Japanese, French, German, Spanish, Portuguese, and Italian subtitles and metadata are prepared. Portuguese narration uses a Brazilian voice; Spanish uses a Spanish voice.
+Download [release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1), extract the Windows ZIP, provide your own extracted game, and launch Launch-PCVR.cmd. The original-resolution fallback and external resolution settings are included. No game data, PKGs, firmware, keys, or user saves are distributed. See the [English README](../README.md) or any of its seven language alternatives.
 
-## Acceptance and wording
+The video shows PCVR gameplay through Virtual Desktop/VDXR at 1.50x internal resolution and genuine standalone Quest 3 footage recorded locally at 1.00x. Eight-language subtitles, metadata, and narration tracks are prepared. Portuguese uses a Brazilian voice; Spanish uses a Spanish voice. Quest110 is the suggested first higher-resolution setting, with aliasing; Quest125 had noticeable stutter. A gaming PC with Virtual Desktop streaming is recommended for image quality.
 
-PCVR / VDXR 1.50x full-game completion is user-confirmed. PC125 was startup-checked only. Quest image, tracking, and basic controls are user-confirmed; Quest full-game completion, measured FPS, precise Move pointing, and repeated-run stability are not claimed. A separate later PC session has an unresolved preload crash, as described in [testing details](../TESTING.md).
+## Acceptance
 
-Quest110 is the suggested first higher-resolution profile, with visible aliasing; Quest125 had noticeable stutter. The recorded standalone footage is 100/1.00x. A gaming PC with Virtual Desktop streaming is recommended for image quality. The PC graphics-memory fix belongs to PCVR 0.2.1; the Quest APK remains unchanged at 0.2.0.
+PCVR / VDXR 1.50x full completion is user-confirmed. PC125 was startup-checked only. Quest image, tracking, and basic controls are user-confirmed. Measured FPS, repeated-run stability, precise Move pointing, and Quest full-game completion are not claimed. A separate later PC session has an unresolved preload access violation; see [testing details](../TESTING.md).
 
-## Coordinated publication
+The graphics-memory repair belongs to PCVR 0.2.1. The Quest APK remains unchanged at 0.2.0. This public release refreshes documentation and packaging without changing either native PC executable or the Quest APK.
 
-When the maintainer is ready, make the repository public and publish the prepared release immediately before making the video public, so its download links work for viewers at launch. These changes must be coordinated in one publication window; no unattended action is planned. Read back the repository visibility, release availability, and video visibility before announcing completion. The current private YouTube URL is usable for preparation and does not by itself meet the earlier publication condition.
+## Credits and support
 
-The local eight-language subtitle and description audit retains original files and provides revised description copies. It checks text structure and consistency, not live uploaded private tracks or a full listening review of every language. Installers contain no game data, PKGs, firmware, keys, or user saves.
-
-## Support
-
-The maintainer confirmed that receiving is available again on October 7. Use [Ko-fi / terry2418](https://ko-fi.com/terry2418) in the video description and repository funding link.
+Built on [AstroQuest](https://github.com/bigmak94/AstroQuest) and [shadPS4](https://github.com/shadps4-emu/shadPS4). Support continued development on [Ko-fi / terry2418](https://ko-fi.com/terry2418).

@@ -1,14 +1,14 @@
-# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0 兼容预览
+# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0 兼容项目
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
 本项目基于 AstroQuest/shadPS4，为 **Fate/Grand Order VR feat. Mash Kyrielight** 提供兼容支持，目标为日版 PS4 游戏 **CUSA09078**，版本 **01.00 / 01.01**。PC 通过 Virtual Desktop / VDXR 使用 OpenXR；Quest APK 则使用 ARM64 核心、FEX 和 Turnip 在头显本地运行。
 
-本仓库目前为**私有预览**。兼容演示和后续游玩素材将一起制作发布视频；计划仓库、Release与视频一起公开。现在不自动公开。
+本仓库及下载Release已公开。
 
-## 视频预览
+## 演示视频
 
-[观看兼容演示视频](https://youtu.be/zBSpUSqpUaw)。视频当前为YouTube私享，只有拥有者授权的观众可以观看；计划2026-10-10与GitHub项目一起公开，目前没有设置自动发布。
+[观看兼容演示视频](https://youtu.be/zBSpUSqpUaw)。
 
 视频PCVR片段使用VDXR、内部1.50倍；Quest单机片段为头显本地1.00倍。有游戏PC时优先推荐Virtual Desktop串流，画质更好。本次八语言支持指README及视频资料，原版日语游戏和英文设置界面没有翻译。
 
@@ -33,7 +33,7 @@
 
 ## 下载与启动
 
-默认说明与设置界面为英文，本页保留中文说明。维护者在Draft Release中准备Windows便携ZIP、Quest0.2.0 APK、源码ZIP和SHA256SUMS。APK与便携包不包含PS4游戏、PKG、固件、用户存档或密钥。
+默认说明与设置界面为英文，本页保留中文说明。[Release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1)提供完整Windows便携运行目录ZIP、Quest0.2.0 APK、源码ZIP和SHA256SUMS。Windows ZIP解压、放入自己的游戏文件后运行Launch-PCVR.cmd即可。APK与便携包不包含PS4游戏、PKG、固件、用户存档或密钥。
 
 ### Windows / PCVR
 

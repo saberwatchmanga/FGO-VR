@@ -7,17 +7,17 @@ Spiele **Fate/Grand Order VR feat. Mash Kyrielight** mit einem auf AstroQuest/sh
 - **PCVR:** OpenXR über Virtual Desktop und VDXR.
 - **Standalone Quest 3:** ein lokaler ARM64-Kern mit FEX und Turnip; der PC streamt keine Spielbilder.
 
-Dies ist derzeit eine private Vorschau. Repository und Releases bleiben privat bzw. Entwürfe. Das Release-Demovideo ist eine private Vorschau, die nur für autorisierte YouTube-Konten erreichbar ist: [Privates Vorschauvideo ansehen](https://youtu.be/zBSpUSqpUaw). Die Pakete enthalten keine PS4-Spieldaten, PKGs, Firmware, Schlüssel oder Spielstände. Stelle dein eigenes extrahiertes Spiel bereit.
+Dieses Projekt und die Downloads sind öffentlich verfügbar. [Demonstrationsvideo ansehen](https://youtu.be/zBSpUSqpUaw). Die Pakete enthalten keine PS4-Spieldaten, PKGs, Firmware, Schlüssel oder Spielstände. Stelle dein eigenes extrahiertes Spiel bereit.
 
 ## Downloads
 
-Vorschaupakete sind in den [Entwurfs-Releases](https://github.com/saberwatchmanga/FGO-VR/releases) bereitgestellt:
+Die vollständigen portablen Windows-Dateien, das Quest-APK und der Quelltext stehen im [Release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1) zum Download bereit:
 
 | Datei | Komponente |
 | --- | --- |
-| `FGO-VR-0.2.1-PCVR-Windows.zip` | Windows-PCVR-Build und externe Auflösungseinstellungen |
-| `FGO-VR-0.2.0-Quest3.apk` | Standalone-Quest-3-Build, in diesem PC-Update unverändert |
-| `FGO-VR-0.2.1-Source.zip` | Gepinnte Patches, geänderte Quelltext-Snapshots, Build-Referenzen und Lizenzen |
+| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Windows-PCVR-Build und externe Auflösungseinstellungen |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Standalone-Quest-3-Build, in diesem PC-Update unverändert |
+| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | Gepinnte Patches, geänderte Quelltext-Snapshots, Build-Referenzen und Lizenzen |
 | `SHA256SUMS` / `artifact-manifest.json` | Dateiüberprüfung und Komponentenversionen |
 
 ## Schnellstart für Windows / PCVR

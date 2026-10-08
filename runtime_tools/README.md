@@ -7,23 +7,23 @@ Play **Fate/Grand Order VR feat. Mash Kyrielight** using an AstroQuest/shadPS4-b
 - **PCVR:** OpenXR through Virtual Desktop and VDXR.
 - **Standalone Quest 3:** a local ARM64 core using FEX and Turnip; the PC does not stream the game frames.
 
-This is currently a **private preview**. The repository and releases will stay private/draft until the planned coordinated launch. Packages include no PS4 game data, PKGs, firmware, keys, or user saves. Provide your own extracted game.
+This project and its downloadable release are publicly available. Packages include no PS4 game data, PKGs, firmware, keys, or user saves. Provide your own extracted game.
 
-## Video preview
+## Demonstration video
 
-[Watch the release demonstration](https://youtu.be/zBSpUSqpUaw). It is currently private on YouTube; only viewers authorized by the owner can watch it. The maintainer plans to publish the video and GitHub project together on October 10, 2026. No automatic publication is scheduled.
+[Watch the release demonstration](https://youtu.be/zBSpUSqpUaw).
 
 PCVR footage uses VDXR at **1.50×** internal resolution. Standalone footage was recorded locally on Quest 3 at **1.00×**. With a gaming PC, Virtual Desktop streaming is recommended for better image quality. The README is available in eight languages; the original Japanese game and English settings interface are unchanged.
 
 ## Downloads
 
-Preview packages are staged in the [draft releases](https://github.com/saberwatchmanga/FGO-VR/releases):
+Download the complete Windows portable folder, Quest APK, and source from [release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1). Extract the Windows ZIP, add your own game files as described below, and run `Launch-PCVR.cmd`:
 
 | File | Component |
 | --- | --- |
-| `FGO-VR-0.2.1-PCVR-Windows.zip` | Windows PCVR build and external resolution settings |
-| `FGO-VR-0.2.0-Quest3.apk` | Standalone Quest 3 build, unchanged in this PC update |
-| `FGO-VR-0.2.1-Source.zip` | Pinned patches, modified source snapshots, build references, and licenses |
+| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Windows PCVR build and external resolution settings |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Standalone Quest 3 build, unchanged in this PC update |
+| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | Pinned patches, modified source snapshots, build references, and licenses |
 | `SHA256SUMS` / `artifact-manifest.json` | File verification and component versions |
 
 ## Windows / PCVR quick start

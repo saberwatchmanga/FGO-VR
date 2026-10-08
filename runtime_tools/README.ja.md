@@ -7,17 +7,17 @@ AstroQuest/shadPS4 ベースの互換ビルドで、**Fate/Grand Order VR feat. 
 - **PCVR:** Virtual Desktop と VDXR を使用する OpenXR。
 - **Quest 3単体動作:** FEX と Turnip を使うローカルARM64コア。PCからゲーム映像をストリーミングしません。
 
-現在は非公開プレビューです。リポジトリとリリースは非公開／ドラフトのままです。リリース紹介動画も非公開プレビューで、許可されたYouTubeアカウントのみ視聴できます：[非公開プレビュー動画を見る](https://youtu.be/zBSpUSqpUaw)。パッケージにPS4ゲームデータ、PKG、ファームウェア、鍵、セーブデータは含まれません。ご自身で抽出したゲームをご用意ください。
+本プロジェクトとダウンロードを公開しました。[紹介動画を見る](https://youtu.be/zBSpUSqpUaw)。パッケージにPS4ゲームデータ、PKG、ファームウェア、鍵、セーブデータは含まれません。ご自身で抽出したゲームをご用意ください。
 
 ## ダウンロード
 
-プレビューパッケージは[ドラフトリリース](https://github.com/saberwatchmanga/FGO-VR/releases)に用意されています。
+Windowsポータブル版の完全なフォルダー、Quest APK、ソースは[リリースv0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1)からダウンロードできます。
 
 | ファイル | 内容 |
 | --- | --- |
-| `FGO-VR-0.2.1-PCVR-Windows.zip` | Windows PCVRビルドと外部解像度設定ツール |
-| `FGO-VR-0.2.0-Quest3.apk` | Quest 3単体動作用ビルド。このPC更新では変更なし |
-| `FGO-VR-0.2.1-Source.zip` | 固定済みパッチ、変更したソーススナップショット、ビルド参照資料、ライセンス |
+| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Windows PCVRビルドと外部解像度設定ツール |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Quest 3単体動作用ビルド。このPC更新では変更なし |
+| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | 固定済みパッチ、変更したソーススナップショット、ビルド参照資料、ライセンス |
 | `SHA256SUMS` / `artifact-manifest.json` | ファイル検証情報と各コンポーネントのバージョン |
 
 ## Windows / PCVR クイックスタート
@@ -63,7 +63,7 @@ Questを1台だけUSB接続した状態で、Windows設定ツールからQuest�
 | 125 | 起動のみ確認 | 利用可能 | Questでは目立つカクつきがあるとの報告 |
 | 150 | 利用可能 | PCのみ | PCVR/VDXRで画質が良く、全編クリアしたとのユーザー報告 |
 
-Questでは**110**を最初の推奨プロファイルとします。プレビュー動画のQuest映像は単体動作の100 (1.00x)で収録されており、PCよりエイリアシングが目立ちます。ゲーミングPCがある場合は、Virtual Desktop経由のPCVRストリーミングを推奨します。性能が低い場合は100に戻してください。テストしたPCはi5-13400F / RTX 4070 / 64 GB RAMです。定量的なFPS値や全編を通した性能は主張していません。
+Questでは**110**を最初の推奨プロファイルとします。紹介動画のQuest映像は単体動作の100 (1.00x)で収録されており、PCよりエイリアシングが目立ちます。ゲーミングPCがある場合は、Virtual Desktop経由のPCVRストリーミングを推奨します。性能が低い場合は100に戻してください。テストしたPCはi5-13400F / RTX 4070 / 64 GB RAMです。定量的なFPS値や全編を通した性能は主張していません。
 
 検証済みの片目あたりの描画ターゲットは、100で1408×1512、110で1536×1663、125で1792×1890、PC150で2048×2268です。このパッチはゲーム本来の正規リクエスト1.4fを置き換え、他のリクエストとアロケーションチェックを維持し、スケールが繰り返し乗算されるのを防ぎます。
 

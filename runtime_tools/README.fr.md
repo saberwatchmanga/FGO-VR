@@ -7,17 +7,17 @@ Jouez à **Fate/Grand Order VR feat. Mash Kyrielight** avec une version de compa
 - **PCVR :** OpenXR via Virtual Desktop et VDXR.
 - **Quest 3 autonome :** cœur ARM64 local avec FEX et Turnip ; le PC ne diffuse pas les images du jeu.
 
-Il s’agit actuellement d’un aperçu privé. Le dépôt et les releases restent privés/en brouillon. La vidéo de démonstration de la release est un aperçu privé, accessible uniquement aux comptes YouTube autorisés : [Voir la vidéo d’aperçu privé](https://youtu.be/zBSpUSqpUaw). Les paquets ne contiennent aucune donnée de jeu PS4, PKG, firmware, clé ni sauvegarde. Fournissez votre propre jeu extrait.
+Ce projet et ses téléchargements sont publics. [Voir la vidéo de démonstration](https://youtu.be/zBSpUSqpUaw). Les paquets ne contiennent aucune donnée de jeu PS4, PKG, firmware, clé ni sauvegarde. Fournissez votre propre jeu extrait.
 
 ## Téléchargements
 
-Les paquets d’aperçu sont préparés dans les [releases en brouillon](https://github.com/saberwatchmanga/FGO-VR/releases) :
+Le dossier Windows portable complet, l’APK Quest et les sources sont disponibles dans la [release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1) :
 
 | Fichier | Composant |
 | --- | --- |
-| `FGO-VR-0.2.1-PCVR-Windows.zip` | Version PCVR pour Windows et réglages de résolution externes |
-| `FGO-VR-0.2.0-Quest3.apk` | Version autonome pour Quest 3, inchangée dans cette mise à jour PC |
-| `FGO-VR-0.2.1-Source.zip` | Correctifs épinglés, instantanés des sources modifiées, références de compilation et licences |
+| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Version PCVR pour Windows et réglages de résolution externes |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Version autonome pour Quest 3, inchangée dans cette mise à jour PC |
+| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | Correctifs épinglés, instantanés des sources modifiées, références de compilation et licences |
 | `SHA256SUMS` / `artifact-manifest.json` | Vérification des fichiers et versions des composants |
 
 ## Démarrage rapide Windows / PCVR

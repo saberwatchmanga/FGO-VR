@@ -8,7 +8,9 @@
 
 ## 演示视频
 
-[观看兼容演示视频](https://youtu.be/zBSpUSqpUaw)。
+[![FGO VR — 打开演示页播放](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=zh-CN)
+
+**[▶ 打开演示页播放](https://saberwatchmanga.github.io/FGO-VR/?lang=zh-CN)** · [在YouTube观看](https://youtu.be/zBSpUSqpUaw)
 
 视频PCVR片段使用VDXR、内部1.50倍；Quest单机片段为头显本地1.00倍。有游戏PC时优先推荐Virtual Desktop串流，画质更好。本次八语言支持指README及视频资料，原版日语游戏和英文设置界面没有翻译。
 

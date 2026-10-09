@@ -7,7 +7,13 @@ Jouez à **Fate/Grand Order VR feat. Mash Kyrielight** avec une version de compa
 - **PCVR :** OpenXR via Virtual Desktop et VDXR.
 - **Quest 3 autonome :** cœur ARM64 local avec FEX et Turnip ; le PC ne diffuse pas les images du jeu.
 
-Ce projet et ses téléchargements sont publics. [Voir la vidéo de démonstration](https://youtu.be/zBSpUSqpUaw). Les paquets ne contiennent aucune donnée de jeu PS4, PKG, firmware, clé ni sauvegarde. Fournissez votre propre jeu extrait.
+Ce projet et ses téléchargements sont publics. [Voir la vidéo de démonstration](https://saberwatchmanga.github.io/FGO-VR/?lang=fr). Les paquets ne contiennent aucune donnée de jeu PS4, PKG, firmware, clé ni sauvegarde. Fournissez votre propre jeu extrait.
+
+## Vidéo de démonstration
+
+[![FGO VR — Regarder la démonstration](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=fr)
+
+**[▶ Regarder la démonstration](https://saberwatchmanga.github.io/FGO-VR/?lang=fr)** · [Regarder sur YouTube](https://youtu.be/zBSpUSqpUaw)
 
 ## Téléchargements
 

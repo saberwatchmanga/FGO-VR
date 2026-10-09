@@ -7,7 +7,13 @@ Spiele **Fate/Grand Order VR feat. Mash Kyrielight** mit einem auf AstroQuest/sh
 - **PCVR:** OpenXR über Virtual Desktop und VDXR.
 - **Standalone Quest 3:** ein lokaler ARM64-Kern mit FEX und Turnip; der PC streamt keine Spielbilder.
 
-Dieses Projekt und die Downloads sind öffentlich verfügbar. [Demonstrationsvideo ansehen](https://youtu.be/zBSpUSqpUaw). Die Pakete enthalten keine PS4-Spieldaten, PKGs, Firmware, Schlüssel oder Spielstände. Stelle dein eigenes extrahiertes Spiel bereit.
+Dieses Projekt und die Downloads sind öffentlich verfügbar. [Demonstrationsvideo ansehen](https://saberwatchmanga.github.io/FGO-VR/?lang=de). Die Pakete enthalten keine PS4-Spieldaten, PKGs, Firmware, Schlüssel oder Spielstände. Stelle dein eigenes extrahiertes Spiel bereit.
+
+## Demonstrationsvideo
+
+[![FGO VR — Demonstration ansehen](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=de)
+
+**[▶ Demonstration ansehen](https://saberwatchmanga.github.io/FGO-VR/?lang=de)** · [Auf YouTube ansehen](https://youtu.be/zBSpUSqpUaw)
 
 ## Downloads
 

@@ -11,7 +11,9 @@ This project and its downloadable release are publicly available. Packages inclu
 
 ## Demonstration video
 
-[Watch the release demonstration](https://youtu.be/zBSpUSqpUaw).
+[![FGO VR — Watch the demonstration](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=en)
+
+**[▶ Watch the demonstration](https://saberwatchmanga.github.io/FGO-VR/?lang=en)** · [Watch on YouTube](https://youtu.be/zBSpUSqpUaw)
 
 PCVR footage uses VDXR at **1.50×** internal resolution. Standalone footage was recorded locally on Quest 3 at **1.00×**. With a gaming PC, Virtual Desktop streaming is recommended for better image quality. The README is available in eight languages; the original Japanese game and English settings interface are unchanged.
 

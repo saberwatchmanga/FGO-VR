@@ -7,7 +7,13 @@ AstroQuest/shadPS4 ベースの互換ビルドで、**Fate/Grand Order VR feat. 
 - **PCVR:** Virtual Desktop と VDXR を使用する OpenXR。
 - **Quest 3単体動作:** FEX と Turnip を使うローカルARM64コア。PCからゲーム映像をストリーミングしません。
 
-本プロジェクトとダウンロードを公開しました。[紹介動画を見る](https://youtu.be/zBSpUSqpUaw)。パッケージにPS4ゲームデータ、PKG、ファームウェア、鍵、セーブデータは含まれません。ご自身で抽出したゲームをご用意ください。
+本プロジェクトとダウンロードを公開しました。[紹介動画を見る](https://saberwatchmanga.github.io/FGO-VR/?lang=ja)。パッケージにPS4ゲームデータ、PKG、ファームウェア、鍵、セーブデータは含まれません。ご自身で抽出したゲームをご用意ください。
+
+## 紹介動画
+
+[![FGO VR — 紹介動画を再生](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=ja)
+
+**[▶ 紹介動画を再生](https://saberwatchmanga.github.io/FGO-VR/?lang=ja)** · [YouTubeで見る](https://youtu.be/zBSpUSqpUaw)
 
 ## ダウンロード
 

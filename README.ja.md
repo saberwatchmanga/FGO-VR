@@ -1,10 +1,10 @@
-# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0
+# FGO VR — PCVR 0.2.2 / Quest 3 0.2.0
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
 AstroQuest/shadPS4 ベースの互換ビルドで、**Fate/Grand Order VR feat. Mash Kyrielight**をプレイできます。本プロジェクトの対象は日本版PS4タイトル **CUSA09078**、ゲームバージョン **01.00 / 01.01** です。
 
-- **PCVR:** Virtual Desktop と VDXR を使用する OpenXR。
+- **PCVR:** Virtual Desktop / VDXR（Launch-PCVR.cmd）のほか、任意でSteamVR（Launch-PCVR-SteamVR.cmd）を利用できます。
 - **Quest 3単体動作:** FEX と Turnip を使うローカルARM64コア。PCからゲーム映像をストリーミングしません。
 
 本プロジェクトとダウンロードを公開しました。[紹介動画を見る](https://saberwatchmanga.github.io/FGO-VR/?lang=ja)。パッケージにPS4ゲームデータ、PKG、ファームウェア、鍵、セーブデータは含まれません。ご自身で抽出したゲームをご用意ください。
@@ -17,22 +17,22 @@ AstroQuest/shadPS4 ベースの互換ビルドで、**Fate/Grand Order VR feat. 
 
 ## ダウンロード
 
-Windowsポータブル版の完全なフォルダー、Quest APK、ソースは[リリースv0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1)からダウンロードできます。
+Windowsポータブル版の完全なフォルダー、Quest APK、ソースは[リリースv0.2.2](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.2)からダウンロードできます。
 
 | ファイル | 内容 |
 | --- | --- |
-| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Windows PCVRビルドと外部解像度設定ツール |
-| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Quest 3単体動作用ビルド。このPC更新では変更なし |
-| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | 固定済みパッチ、変更したソーススナップショット、ビルド参照資料、ライセンス |
+| [FGO-VR-0.2.2-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-PCVR-Windows.zip) | Windows PCVRビルドと外部解像度設定ツール |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.0-Quest3.apk) | Quest 3単体動作用ビルド。このPC更新では変更なし |
+| [FGO-VR-0.2.2-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-Source.zip) | 固定済みパッチ、変更したソーススナップショット、ビルド参照資料、ライセンス |
 | `SHA256SUMS` / `artifact-manifest.json` | ファイル検証情報と各コンポーネントのバージョン |
 
 ## Windows / PCVR クイックスタート
 
-必要なもの：64ビット版Windows、Vulkan対応GPUとドライバー、Microsoft Visual C++ランタイム、PC上のVirtual Desktop Streamer、ヘッドセット上のVirtual Desktop。
+必要なもの：64ビット版Windows、Vulkan対応GPUとドライバー、Microsoft Visual C++ランタイム。VDXRにはPC上のVirtual Desktop Streamerとヘッドセット上のVirtual Desktopが必要です。任意のSteamVRルートにはSteam、SteamVR、対応ヘッドセットが必要です。Quest 3では、先にSteam LinkでSteamVRへ接続してください。このルートではVirtual Desktopは不要です。
 
-1. `FGO-VR-0.2.1-PCVR-Windows.zip`を展開します。
+1. `FGO-VR-0.2.2-PCVR-Windows.zip`を展開します。
 2. `eboot.bin`を含む抽出済みベースゲームを`FGO-PC/games/CUSA09078`に置きます。任意のアップデートは隣の`FGO-PC/games/CUSA09078-UPDATE`に置きます。ベースゲームなしではアップデートを実行できません。
-3. Virtual Desktopでヘッドセットを接続し、Streamerを起動したままにします。
+3. VDXRを使う場合は、Virtual Desktopでヘッドセットを接続し、Streamerを起動したままにします。
 4. **`Launch-PCVR.cmd`**をダブルクリックします。このランチャーはシステム全体のOpenXR設定を変更せず、このプロセスでVDXRを選択します。終了するにはゲームウィンドウを閉じます。
 5. 解像度を変更するには**`Resolution-Settings.cmd`**を開きます。Python 3とTkが必要です。設定を保存してゲームを再起動してください。Pythonがない場合は`FGO-Resolution/settings.json`を編集するか、`profiles`内の直接起動ランチャーを使います。
 6. **`Launch-PCVR-Original.cmd`**は常に元の解像度のビルドを、同じセーブデータで起動します。
@@ -40,6 +40,14 @@ Windowsポータブル版の完全なフォルダー、Quest APK、ソースは[
 中国語名の元のランチャーも引き続き収録されています。任意のシステムフォントはAstroQuest upstreamの手順に従ってください。ゲーム機のシステムファイルは同梱されません。
 
 セーブ先：`FGO-PC/runtime-vr/user/home/1000/savedata/CUSA09078`。タイトルのフォルダー全体をバックアップする前にゲームを終了してください。
+
+### 任意のSteamVRルート
+
+SteamとSteamVRは手動で起動してください。Quest 3では、まずSteam LinkでヘッドセットをSteamVRに接続し、その後Launch-PCVR-SteamVR.cmdを実行します（中国語名の启动FGO-VR-PCVR-SteamVR.cmdもあります）。SteamVRはあらかじめ起動しておく必要があり、ランチャーが自動起動することはありません。ランチャーはこのゲームプロセスに限ってSteamVRのランタイムマニフェストを選択し、システム全体のOpenXR既定設定は変更しません。どちらのランチャーも同じコア、セーブデータ、解像度設定を使用します。従来の -RenderScale 100 引数も引き続き使えます。このルートではVirtual Desktopは不要です。
+
+2026年10月18日、Steam Link経由のQuest 3で内部解像度150%の起動をユーザーが確認しました。約52秒動作した後、終了コード0で正常終了しました。これは短時間の起動確認であり、SteamVRでの全編プレイやFPS・音声・快適性の詳細な評価ではありません。
+
+詳しくは [SteamVRガイド](docs/STEAMVR.md) を参照してください。
 
 ## Quest 3単体動作のクイックスタート
 

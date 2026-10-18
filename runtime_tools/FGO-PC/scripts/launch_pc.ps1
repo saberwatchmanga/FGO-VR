@@ -5,7 +5,10 @@ param(
     [switch]$NoHeadsetPause,
     [ValidateSet('100', '110', '125', '150')][string]$RenderScale,
     [switch]$CrashDiagnostics,
-    [switch]$TransitionFix
+    [switch]$TransitionFix,
+    [ValidateSet('VDXR', 'SteamVR')][string]$OpenXrRuntime = 'VDXR',
+    [string]$OpenXrManifest,
+    [switch]$CheckOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -72,17 +75,17 @@ $env:SHADPS4_TITLE_TIMESTEP = '0'
 $env:SHADPS4_FGO_RENDER_SCALE = $FgoScale
 if ($CrashDiagnostics) { $env:SHADPS4_FGO_CRASH_DIAGNOSTICS = '1' }
 $FgoRuntimeManifest = $null
+$FgoSteamVrRunning = $null
 if ($Mode -eq 'PcVr') {
-    $FgoRuntimeManifest = Join-Path $env:ProgramFiles 'Virtual Desktop Streamer\OpenXR\virtualdesktop-openxr.json'
-    if (-not (Test-Path -LiteralPath $FgoRuntimeManifest)) {
-        throw 'Virtual Desktop VDXR runtime was not found. Install/open Virtual Desktop Streamer first.'
+    . (Join-Path $PSScriptRoot 'openxr_runtime.ps1')
+    $FgoRuntimeManifest = Resolve-FgoOpenXrManifest -Runtime $OpenXrRuntime -ManifestPath $OpenXrManifest
+    if ($OpenXrRuntime -eq 'SteamVR') {
+        $FgoSteamVrRunning = [bool](Get-Process -Name vrserver -ErrorAction SilentlyContinue)
+        if (-not $CheckOnly -and -not $FgoSteamVrRunning) {
+            throw 'Connect Steam Link and start SteamVR first, then run this launcher. It does not start SteamVR automatically.'
+        }
     }
-    $FgoManifestData = Get-Content -LiteralPath $FgoRuntimeManifest -Raw | ConvertFrom-Json
-    $FgoRuntimeLibrary = Join-Path (Split-Path -Parent $FgoRuntimeManifest) $FgoManifestData.runtime.library_path
-    if (-not (Test-Path -LiteralPath $FgoRuntimeLibrary)) {
-        throw 'VDXR manifest exists but its runtime DLL is missing.'
-    }
-    # A process-local override selects VDXR without changing the system OpenXR registration.
+    # Process-local selection; never change the system OpenXR registration.
     $env:XR_RUNTIME_JSON = $FgoRuntimeManifest
     $env:SHADPS4_OPENXR = '1'
     $env:SHADPS4_XR_WAIT = [string]$HeadsetWaitSeconds
@@ -99,10 +102,11 @@ $FgoArguments = @('-g', ('"' + $FgoGame + '"'), '-f', 'false')
 if ($GameVersion -eq '01.00') { $FgoArguments += '--ignore-game-patch' }
 $FgoSessionName = (Get-Date -Format 'yyyyMMdd_HHmmssfff') + '_' + $GameVersion
 if ($Mode -eq 'PcVr') { $FgoSessionName += '_PCVR' }
+if ($Mode -eq 'PcVr' -and $OpenXrRuntime -eq 'SteamVR') { $FgoSessionName += '_SteamVR' }
 if ($TransitionFix) { $FgoSessionName += '_TRANSITIONFIX' }
 if ($CrashDiagnostics) { $FgoSessionName += '_DIAGNOSTIC' }
 $FgoSession = Join-Path $FgoInstallDir ('sessions\' + $FgoSessionName)
-New-Item -ItemType Directory -Path $FgoSession | Out-Null
+if (-not $CheckOnly) { New-Item -ItemType Directory -Path $FgoSession | Out-Null }
 $FgoHashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
 $FgoExeStream = [System.IO.File]::OpenRead($FgoExe)
 try {
@@ -117,16 +121,24 @@ $FgoRecord = [ordered]@{
     executable_sha256 = $FgoExeHash
     arguments = $FgoArguments
     working_directory = $FgoRuntimeDir
-    started_at = (Get-Date).ToString('o')
+    started_at = $(if ($CheckOnly) { $null } else { (Get-Date).ToString('o') })
     mode = $Mode
+    check_only = [bool]$CheckOnly
     resolution_percent_requested = [int]$FgoScale
     crash_diagnostics = [bool]$CrashDiagnostics
     transition_fix = [bool]$TransitionFix
     openxr_runtime_manifest = $FgoRuntimeManifest
+    openxr_runtime_requested = $(if ($Mode -eq 'PcVr') { $OpenXrRuntime } else { $null })
+    steamvr_server_running = $FgoSteamVrRunning
     environment = [ordered]@{}
 }
 foreach ($FgoEnv in @(Get-ChildItem Env: | Where-Object { $_.Name -like 'SHADPS4_*' -or $_.Name -eq 'XR_RUNTIME_JSON' })) {
     $FgoRecord.environment[$FgoEnv.Name] = $FgoEnv.Value
+}
+if ($CheckOnly) {
+    # No game, runtime, session directory, or diagnostic-log mutation in preflight.
+    $FgoRecord | ConvertTo-Json -Depth 4
+    return
 }
 $FgoRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $FgoSession 'run.json') -Encoding UTF8
 if ($CrashDiagnostics) {
@@ -138,12 +150,16 @@ if ($CrashDiagnostics) {
     }
     Write-Host 'FGO PCVR diagnostic: normal-speed gameplay; crash context will be preserved automatically.'
 }
-if ($TransitionFix) { Write-Host 'Transition fix test: graphics memory budget follows resolution; original saves and VDXR.' }
+if ($TransitionFix) { Write-Host ('Transition fix test: graphics memory budget follows resolution; original saves and ' + $OpenXrRuntime + '.') }
 Write-Host ('FGO VR ' + $Mode + ' ' + $GameVersion + ' - Q / E: game confirm, arrows: menu selection, Enter: Options')
 if ($Mode -eq 'PcVr') {
     Write-Host ('Internal resolution: ' + $FgoScale + '% of original dimensions (100 = OFF). Restart to change.')
-    Write-Host 'Connect Quest through Virtual Desktop. Touch LEFT grip / trigger: Q / E, LEFT stick: menu directions.'
-    Write-Host 'Both stick clicks: recenter. The PC window remains a stereo preview; VDXR presents each eye in the headset.'
+    Write-Host ('OpenXR runtime: ' + $OpenXrRuntime + ' - ' + $FgoRuntimeManifest)
+    if ($OpenXrRuntime -eq 'SteamVR') {
+        Write-Host 'Connect Steam Link and keep SteamVR running before launch. SteamVR is not started by this script.'
+    } else { Write-Host 'Connect Quest through Virtual Desktop and keep the Streamer running.' }
+    Write-Host 'Touch LEFT grip / trigger: Q / E, LEFT stick: menu directions. Both stick clicks: recenter.'
+    Write-Host 'The PC window remains a stereo preview; OpenXR presents each eye in the headset.'
 }
 Write-Host 'Loading may show a black screen or publisher logos. Use the game window; close it to exit.'
 $FgoProcess = Start-Process -FilePath $FgoExe -ArgumentList $FgoArguments -WorkingDirectory $FgoRuntimeDir -PassThru -RedirectStandardOutput (Join-Path $FgoSession 'stdout.log') -RedirectStandardError (Join-Path $FgoSession 'stderr.log')

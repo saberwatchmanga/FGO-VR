@@ -1,5 +1,7 @@
 # Release and Demonstration Video
 
+Current Windows package: **PCVR 0.2.2**, adding optional SteamVR / Steam Link startup alongside VDXR. See the [SteamVR guide](STEAMVR.md). The original demonstration footage and Quest 0.2.0 APK are unchanged.
+
 The maintainer authorized public GitHub availability on October 9, 2026, after scheduling the YouTube video for 8:00. The project is public and release v0.2.1 provides the complete Windows portable folder, Quest APK, source archive, and checksums. The previously planned October10 private-preview gate is superseded by this explicit publication instruction.
 
 [Watch FGO VR on Meta Quest 3](https://youtu.be/zBSpUSqpUaw). The YouTube schedule is maintainer-reported; this project does not manage the video's visibility. If the video is not available yet, wait for its scheduled publication.

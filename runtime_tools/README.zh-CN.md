@@ -1,14 +1,16 @@
-# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0 兼容项目
+# FGO VR — PCVR 0.2.2 / Quest 3 0.2.0 兼容项目
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
-本项目基于 AstroQuest/shadPS4，为 **Fate/Grand Order VR feat. Mash Kyrielight** 提供兼容支持，目标为日版 PS4 游戏 **CUSA09078**，版本 **01.00 / 01.01**。PC 通过 Virtual Desktop / VDXR 使用 OpenXR；Quest APK 则使用 ARM64 核心、FEX 和 Turnip 在头显本地运行。
+本项目基于 AstroQuest/shadPS4，为 **Fate/Grand Order VR feat. Mash Kyrielight** 提供兼容支持，目标为日版 PS4 游戏 **CUSA09078**，版本 **01.00 / 01.01**。PCVR可通过Virtual Desktop/VDXR运行，也可选择SteamVR入口；Quest APK则使用ARM64核心、FEX和Turnip在头显本地运行。
 
 本仓库及下载Release已公开。
 
 ## 演示视频
 
-[观看兼容演示视频](https://youtu.be/zBSpUSqpUaw)。
+[![FGO VR — 打开演示页播放](docs/video-thumbnail.png)](https://saberwatchmanga.github.io/FGO-VR/?lang=zh-CN)
+
+**[▶ 打开演示页播放](https://saberwatchmanga.github.io/FGO-VR/?lang=zh-CN)** · [在YouTube观看](https://youtu.be/zBSpUSqpUaw)
 
 视频PCVR片段使用VDXR、内部1.50倍；Quest单机片段为头显本地1.00倍。有游戏PC时优先推荐Virtual Desktop串流，画质更好。本次八语言支持指README及视频资料，原版日语游戏和英文设置界面没有翻译。
 
@@ -33,20 +35,28 @@
 
 ## 下载与启动
 
-默认说明与设置界面为英文，本页保留中文说明。[Release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1)提供完整Windows便携运行目录ZIP、Quest0.2.0 APK、源码ZIP和SHA256SUMS。Windows ZIP解压、放入自己的游戏文件后运行Launch-PCVR.cmd即可。APK与便携包不包含PS4游戏、PKG、固件、用户存档或密钥。
+默认说明与设置界面为英文，本页保留中文说明。[Release v0.2.2](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.2)提供Windows便携包 [FGO-VR-0.2.2-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-PCVR-Windows.zip)、Quest APK [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.0-Quest3.apk)和源码包 [FGO-VR-0.2.2-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-Source.zip)，另附SHA256SUMS。解压Windows ZIP、放入自己的游戏文件后，可运行Launch-PCVR.cmd或SteamVR入口。APK与便携包不包含PS4游戏、PKG、固件、用户存档或密钥。
 
 ### Windows / PCVR
 
-1. 解压 `FGO-VR-0.2.1-PCVR-Windows.zip`。
+1. 解压 `FGO-VR-0.2.2-PCVR-Windows.zip`。
 2. 将自己的已解包本体放入 `FGO-PC/games/CUSA09078`，其中包含 `eboot.bin`；可选1.01更新放入 `CUSA09078-UPDATE`。本体缺失时更新不能独立启动。
-3. 安装并连接Virtual Desktop，启动Streamer。入口对子进程指定VDXR，不更改系统OpenXR注册。
+3. 如使用VDXR，通过Virtual Desktop连接头显并保持Streamer运行。VDXR入口只为该进程选择运行时，不更改系统默认OpenXR设置。
 4. 双击 `Launch-PCVR.cmd`（也保留原中文入口）。关闭模拟器窗口退出。
 5. `Resolution-Settings.cmd` 提供设置窗口（需Python3/Tk）。没有Python也可编辑 `FGO-Resolution/settings.json`，或使用 `profiles` 内的直接档位入口。设置重启后生效。
 6. `Launch-PCVR-Original.cmd` 强制使用原程序，沿用同一存档目录。
 
-外部依赖：Windows64位、Vulkan显卡驱动、Microsoft Visual C++运行库、Virtual Desktop Streamer和头显端Virtual Desktop。可选系统字体按AstroQuest说明自行配置，未随包提供PS4系统文件。
+通用依赖：Windows 64位、Vulkan显卡驱动和Microsoft Visual C++运行库。VDXR需要PC端Virtual Desktop Streamer与头显端Virtual Desktop。可选SteamVR路线需要Steam、SteamVR及受支持的头显；Quest 3需先用Steam Link连接到SteamVR。该路线不需要Virtual Desktop。可选系统字体按AstroQuest说明自行配置，未随包提供PS4系统文件。
 
 存档位置：`FGO-PC/runtime-vr/user/home/1000/savedata/CUSA09078`。先关闭游戏，再备份整个标题目录。
+
+#### 可选：SteamVR路线
+
+请手动启动Steam和SteamVR，启动器不会自动打开SteamVR。Quest 3请先通过Steam Link连接到SteamVR，再运行Launch-PCVR-SteamVR.cmd（也可使用中文入口启动FGO-VR-PCVR-SteamVR.cmd）。启动器只为该游戏进程选择SteamVR的runtime manifest，不更改系统默认OpenXR runtime。它与VDXR入口使用相同核心、存档和分辨率设置；原有 -RenderScale 100 参数仍受支持。此路线不需要Virtual Desktop。
+
+用户确认于2026-10-18通过Steam Link在Quest 3上以内部150%成功启动，运行约52秒后正常退出（退出码0）。这只是短时启动验收，不代表SteamVR完整通关，也未详细验收FPS、音频或舒适度。
+
+详见 [SteamVR说明](docs/STEAMVR.md)。
 
 ### Quest 3 本地
 

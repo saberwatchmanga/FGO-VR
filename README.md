@@ -1,10 +1,10 @@
-# FGO VR — PCVR 0.2.1 / Quest 3 0.2.0
+# FGO VR — PCVR 0.2.2 / Quest 3 0.2.0
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
 Play **Fate/Grand Order VR feat. Mash Kyrielight** using an AstroQuest/shadPS4-based compatibility build. This project targets the Japanese PS4 title **CUSA09078**, game versions **01.00 / 01.01**.
 
-- **PCVR:** OpenXR through Virtual Desktop and VDXR.
+- **PCVR:** OpenXR through Virtual Desktop and VDXR (Launch-PCVR.cmd), or optional SteamVR (Launch-PCVR-SteamVR.cmd).
 - **Standalone Quest 3:** a local ARM64 core using FEX and Turnip; the PC does not stream the game frames.
 
 This project and its downloadable release are publicly available. Packages include no PS4 game data, PKGs, firmware, keys, or user saves. Provide your own extracted game.
@@ -19,22 +19,22 @@ PCVR footage uses VDXR at **1.50×** internal resolution. Standalone footage was
 
 ## Downloads
 
-Download the complete Windows portable folder, Quest APK, and source from [release v0.2.1](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.1). Extract the Windows ZIP, add your own game files as described below, and run `Launch-PCVR.cmd`:
+Download the complete Windows portable folder, Quest APK, and source from [release v0.2.2](https://github.com/saberwatchmanga/FGO-VR/releases/tag/v0.2.2). Extract the Windows ZIP, add your own game files as described below, and run `Launch-PCVR.cmd`:
 
 | File | Component |
 | --- | --- |
-| [FGO-VR-0.2.1-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-PCVR-Windows.zip) | Windows PCVR build and external resolution settings |
-| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.0-Quest3.apk) | Standalone Quest 3 build, unchanged in this PC update |
-| [FGO-VR-0.2.1-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.1/FGO-VR-0.2.1-Source.zip) | Pinned patches, modified source snapshots, build references, and licenses |
+| [FGO-VR-0.2.2-PCVR-Windows.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-PCVR-Windows.zip) | Windows PCVR build and external resolution settings |
+| [FGO-VR-0.2.0-Quest3.apk](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.0-Quest3.apk) | Standalone Quest 3 build, unchanged in this PC update |
+| [FGO-VR-0.2.2-Source.zip](https://github.com/saberwatchmanga/FGO-VR/releases/download/v0.2.2/FGO-VR-0.2.2-Source.zip) | Pinned patches, modified source snapshots, build references, and licenses |
 | `SHA256SUMS` / `artifact-manifest.json` | File verification and component versions |
 
 ## Windows / PCVR quick start
 
-Requirements: 64-bit Windows, a Vulkan-capable GPU and driver, Microsoft Visual C++ runtime, Virtual Desktop Streamer on the PC, and Virtual Desktop on the headset.
+Requirements: 64-bit Windows, a Vulkan-capable GPU and driver, and the Microsoft Visual C++ runtime. VDXR requires Virtual Desktop Streamer on the PC and Virtual Desktop on the headset. The optional SteamVR route requires Steam with SteamVR and a supported headset; Quest 3 connects to SteamVR through Steam Link first. Virtual Desktop is not required for this route.
 
-1. Extract `FGO-VR-0.2.1-PCVR-Windows.zip`.
+1. Extract `FGO-VR-0.2.2-PCVR-Windows.zip`.
 2. Put your extracted base game in `FGO-PC/games/CUSA09078`, including `eboot.bin`. Put the optional update beside it in `FGO-PC/games/CUSA09078-UPDATE`. The update cannot run without the base game.
-3. Connect the headset through Virtual Desktop and keep the Streamer running.
+3. For VDXR, connect the headset through Virtual Desktop and keep the Streamer running.
 4. Double-click **`Launch-PCVR.cmd`**. The launcher selects VDXR for this process without changing the system OpenXR setting. Close the game window to exit.
 5. To change resolution, open **`Resolution-Settings.cmd`**. It requires Python 3 with Tk. Save the setting, then restart the game. Without Python, edit `FGO-Resolution/settings.json` or use a direct launcher under `profiles`.
 6. **`Launch-PCVR-Original.cmd`** always uses the original-resolution build with the same saves.
@@ -42,6 +42,14 @@ Requirements: 64-bit Windows, a Vulkan-capable GPU and driver, Microsoft Visual 
 The original Chinese-named launchers are also retained. Optional system fonts follow the upstream AstroQuest instructions; console system files are not bundled.
 
 Save location: `FGO-PC/runtime-vr/user/home/1000/savedata/CUSA09078`. Close the game before backing up the entire title directory.
+
+### Optional SteamVR route
+
+Start Steam and SteamVR yourself. For Quest 3, first connect to SteamVR through Steam Link, then run Launch-PCVR-SteamVR.cmd (also available as 启动FGO-VR-PCVR-SteamVR.cmd). SteamVR must already be running; the launcher does not start it automatically. It selects the SteamVR runtime manifest for this game process only and does not change the system-wide OpenXR default. It uses the same core, saves, and resolution setting as the VDXR launcher. The original -RenderScale 100 argument remains supported. Virtual Desktop is not required for this route.
+
+On October 18, 2026, the user confirmed a Quest 3 Steam Link launch at 150% internal resolution that ran for about 52 seconds and exited normally (exit code 0). This was a short startup acceptance only, not a full SteamVR playthrough or detailed FPS, audio, or comfort validation.
+
+See the [SteamVR guide](docs/STEAMVR.md).
 
 ## Standalone Quest 3 quick start
 

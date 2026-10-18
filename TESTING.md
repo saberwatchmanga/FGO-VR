@@ -1,5 +1,13 @@
 # Test Summary
 
+## PCVR 0.2.2: Steam Link / SteamVR (2026-10-18)
+
+The maintainer confirmed successful startup on Quest 3 by connecting through Steam Link first, then running `Launch-PCVR-SteamVR.cmd`. The matching short session used the existing core at 150%, submitted stereo frames to a focused headset session, tracked controllers and exited with code 0 after approximately 52 seconds. See the [acceptance record](docs/USER_ACCEPTANCE_20261018.md) and [SteamVR guide](docs/STEAMVR.md).
+
+The launcher locates and validates the installed SteamVR manifest/DLL, selects it only for this process, and requires SteamVR to be running already. It does not automatically launch SteamVR or change the system OpenXR default. The existing VDXR route, native Windows cores, memory-pool repair, resolution profiles and Quest 0.2.0 APK are unchanged.
+
+This is startup validation, not a SteamVR full playthrough, a performance benchmark, an audio-quality assessment or Steam Frame hardware/controller validation. Native SteamOS/standalone Frame support is not claimed. Current suggested controller bindings cover Oculus Touch. The earlier 67 structural launcher checks are separate evidence from the successful headset startup.
+
 ## PCVR 0.2.1 (2026-10-07)
 
 **Full playthrough completed:** the user has confirmed finishing the complete game on the tested PCVR / VDXR 1.50× setup. This is user-reported gameplay acceptance, separate from the short automated startup checks below.
